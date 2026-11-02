@@ -1,10 +1,16 @@
 """Claims & investigation-queue endpoints."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Request
+from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 
-from app.core.dependencies import CurrentUserDep, DbSession, PaginationDep, client_ip
+from app.core.dependencies import (
+    CurrentUserDep,
+    DbSession,
+    PaginationDep,
+    client_ip,
+    require_permission,
+)
 from app.core.responses import paginated, success
 from app.schemas.claim import ClaimIngest
 from app.services.audit import AuditService
@@ -52,7 +58,10 @@ async def live_feed(db: DbSession, limit: int = Query(5, ge=1, le=50)) -> dict:
     return success(await ClaimService(db).live_feed(limit), "Live feed")
 
 
-@router.post("/ingest", summary="Ingest and score a new claim (NH263)")
+@router.post(
+    "/ingest",
+    dependencies=[Depends(require_permission("claim:approve"))],
+    summary="Ingest and score a new claim (NH263)")
 async def ingest(
     payload: ClaimIngest, db: DbSession, user: CurrentUserDep, request: Request
 ) -> dict:
@@ -79,7 +88,10 @@ async def get_claim(
     return success(data, "Claim detail")
 
 
-@router.post("/{claim_ref}/approve", summary="Approve a claim")
+@router.post(
+    "/{claim_ref}/approve",
+    dependencies=[Depends(require_permission("claim:approve"))],
+    summary="Approve a claim")
 async def approve(
     claim_ref: str, db: DbSession, user: CurrentUserDep, request: Request
 ) -> dict:
@@ -95,7 +107,10 @@ async def approve(
     return success(data, "Claim approved")
 
 
-@router.post("/{claim_ref}/reject", summary="Reject a claim")
+@router.post(
+    "/{claim_ref}/reject",
+    dependencies=[Depends(require_permission("claim:reject"))],
+    summary="Reject a claim")
 async def reject(
     claim_ref: str,
     payload: RejectPayload,
@@ -116,7 +131,10 @@ async def reject(
     return success(data, "Claim rejected")
 
 
-@router.post("/{claim_ref}/notes", summary="Attach an agent note")
+@router.post(
+    "/{claim_ref}/notes",
+    dependencies=[Depends(require_permission("claim:approve"))],
+    summary="Attach an agent note")
 async def add_note(
     claim_ref: str, payload: NotePayload, db: DbSession, user: CurrentUserDep
 ) -> dict:
@@ -126,7 +144,10 @@ async def add_note(
     )
 
 
-@router.post("/{claim_ref}/member-alert", summary="Send a MemberGuard verification alert")
+@router.post(
+    "/{claim_ref}/member-alert",
+    dependencies=[Depends(require_permission("claim:approve"))],
+    summary="Send a MemberGuard verification alert")
 async def member_alert(
     claim_ref: str, payload: MemberAlertPayload, db: DbSession, user: CurrentUserDep
 ) -> dict:
@@ -136,7 +157,10 @@ async def member_alert(
     return success(result, "Alert sent")
 
 
-@router.post("/{claim_ref}/member-response", summary="Record a member's confirmation reply")
+@router.post(
+    "/{claim_ref}/member-response",
+    dependencies=[Depends(require_permission("claim:approve"))],
+    summary="Record a member's confirmation reply")
 async def member_response(
     claim_ref: str, payload: MemberResponsePayload, db: DbSession, _: CurrentUserDep
 ) -> dict:
@@ -144,6 +168,9 @@ async def member_response(
     return success(data, "Response recorded")
 
 
-@router.post("/{claim_ref}/rescore", summary="Re-run FraudShield scoring")
+@router.post(
+    "/{claim_ref}/rescore",
+    dependencies=[Depends(require_permission("claim:approve"))],
+    summary="Re-run FraudShield scoring")
 async def rescore(claim_ref: str, db: DbSession, user: CurrentUserDep) -> dict:
     return success(await ClaimService(db).rescore(claim_ref, actor=user.id), "Rescored")

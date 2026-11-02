@@ -1,9 +1,9 @@
 """Investigation workflow endpoints."""
 from __future__ import annotations
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, Depends, Query
 
-from app.core.dependencies import CurrentUserDep, DbSession, PaginationDep
+from app.core.dependencies import CurrentUserDep, DbSession, PaginationDep, require_permission
 from app.core.responses import paginated, success
 from app.repositories.user import UserRepository
 from app.schemas.investigation import (
@@ -29,7 +29,10 @@ async def list_cases(
     return paginated(items, pagination.page, pagination.page_size, total, "Investigations")
 
 
-@router.post("", summary="Open an investigation for a claim")
+@router.post(
+    "",
+    dependencies=[Depends(require_permission("investigation:manage"))],
+    summary="Open an investigation for a claim")
 async def open_case(
     payload: InvestigationCreate, db: DbSession, user: CurrentUserDep
 ) -> dict:
@@ -47,7 +50,10 @@ async def get_case(investigation_id: str, db: DbSession, _: CurrentUserDep) -> d
     return success(await InvestigationService(db).get(investigation_id), "Investigation")
 
 
-@router.patch("/{investigation_id}", summary="Update an investigation")
+@router.patch(
+    "/{investigation_id}",
+    dependencies=[Depends(require_permission("investigation:manage"))],
+    summary="Update an investigation")
 async def update_case(
     investigation_id: str,
     payload: InvestigationUpdate,
@@ -60,7 +66,10 @@ async def update_case(
     return success(data, "Investigation updated")
 
 
-@router.post("/{investigation_id}/comments", summary="Add a case comment")
+@router.post(
+    "/{investigation_id}/comments",
+    dependencies=[Depends(require_permission("investigation:manage"))],
+    summary="Add a case comment")
 async def add_comment(
     investigation_id: str,
     payload: CommentCreate,
