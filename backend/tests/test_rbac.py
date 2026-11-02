@@ -1,4 +1,5 @@
 """RBAC negative paths — non-admins are blocked from admin-only endpoints."""
+
 from __future__ import annotations
 
 from httpx import AsyncClient
@@ -47,12 +48,18 @@ async def test_auditor_reads_claims(client: AsyncClient, auditor_headers: dict):
 
 async def test_auditor_cannot_change_claims(client: AsyncClient, auditor_headers: dict):
     for path in ("approve", "reject", "rescore", "member-alert"):
-        resp = await client.post(f"/api/v1/claims/CG-00441/{path}", headers=auditor_headers, json={})
+        resp = await client.post(
+            f"/api/v1/claims/CG-00441/{path}", headers=auditor_headers, json={}
+        )
         assert resp.status_code == 403, (path, resp.text)
-    resp = await client.post("/api/v1/claims/CG-00441/notes", headers=auditor_headers, json={"note": "x"})
+    resp = await client.post(
+        "/api/v1/claims/CG-00441/notes", headers=auditor_headers, json={"note": "x"}
+    )
     assert resp.status_code == 403
 
 
 async def test_auditor_cannot_open_investigations(client: AsyncClient, auditor_headers: dict):
-    resp = await client.post("/api/v1/investigations", headers=auditor_headers, json={"claimRef": "CG-00441"})
+    resp = await client.post(
+        "/api/v1/investigations", headers=auditor_headers, json={"claimRef": "CG-00441"}
+    )
     assert resp.status_code == 403
