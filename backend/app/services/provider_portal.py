@@ -11,7 +11,7 @@ import io
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleError, NotFoundError
@@ -31,10 +31,10 @@ _LEGITIMATE = {"FALSE_POSITIVE", "NO_ACTION"}
 
 
 def claim_status(claim: Claim) -> str:
+    if claim.decision == "INFO_NEEDED":  # needs the provider's action: show first
+        return "INFO_NEEDED"
     if claim.member_response == "DISPUTED":
         return "DISPUTED"
-    if claim.decision == "INFO_NEEDED":
-        return "INFO_NEEDED"
     if claim.decision == "APPROVE":
         return "APPROVED"
     if claim.decision.startswith("REJECT"):
@@ -55,7 +55,7 @@ def portal_claim(c: Claim) -> dict:
         "service": c.items[0].description if c.items else None,
         "member": mask_name(c.member.name),
         "status": status,
-        "disputeReason": dispute if status == "DISPUTED" else None,
+        "disputeReason": dispute if c.member_response == "DISPUTED" else None,
         "infoRequest": request.description if request else None,
     }
 
@@ -89,7 +89,8 @@ class ProviderPortalService:
             .where(
                 Claim.provider_id == provider_id,
                 Claim.deleted_at.is_(None),
-                Claim.submitted_at >= since,
+                # Anything waiting on the provider shows however old it is.
+                or_(Claim.submitted_at >= since, Claim.decision == "INFO_NEEDED"),
             )
             .order_by(Claim.submitted_at.desc())
         )

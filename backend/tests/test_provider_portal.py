@@ -87,7 +87,7 @@ async def test_claims_are_own_and_masked(
         assert row["claimRef"] in own_refs
         assert re.fullmatch(r"(\w\. ?)+", row["member"]), row["member"]  # initials only
         assert "riskScore" not in row and "aiExplanation" not in row
-        assert row["status"] in {"APPROVED", "UNDER_REVIEW", "DISPUTED", "REJECTED"}
+        assert row["status"] in {"APPROVED", "UNDER_REVIEW", "DISPUTED", "REJECTED", "INFO_NEEDED"}
 
 
 async def test_report_downloads_as_csv(client: AsyncClient, portal_headers: dict):

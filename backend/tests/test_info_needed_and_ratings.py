@@ -1,6 +1,7 @@
 """Info-needed round trip with the provider, and member care ratings."""
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from urllib.parse import urlencode
 
 import pytest_asyncio
@@ -53,6 +54,7 @@ async def test_info_request_round_trip(
     )
     assert resp.status_code == 200, resp.text
     assert resp.json()["data"]["decision"] == "INFO_NEEDED"
+    assert resp.json()["data"]["slaDeadline"] is None  # clock paused
 
     again = await client.post(
         f"/api/v1/claims/{ref}/request-info", headers=auth_headers, json={"message": "Again?"}
@@ -77,8 +79,28 @@ async def test_info_request_round_trip(
 
     after = (await client.get(f"/api/v1/claims/{ref}", headers=auth_headers)).json()["data"]
     assert after["decision"] == before["decision"]  # back where it was
+    # The clock resumes with the time that was left (about 48h for a new claim).
+    deadline = datetime.fromisoformat(after["slaDeadline"])
+    left = deadline.replace(tzinfo=deadline.tzinfo or UTC) - datetime.now(UTC)  # SQLite: naive
+    assert timedelta(hours=47) < left <= timedelta(hours=48)
     assert after["timeline"][-1]["event"] == "Provider supplied information"
     assert after["timeline"][-1]["type"] == "provider"
+
+
+async def test_old_claim_waiting_on_provider_still_shows(
+    client: AsyncClient, auth_headers: dict, portal_headers: dict
+):
+    # CG-00291 (the portal provider's) was submitted months ago: outside the 30-day list.
+    await client.post(
+        "/api/v1/claims/CG-00291/request-info",
+        headers=auth_headers,
+        json={"message": "Please send the signed prescription."},
+    )
+    rows = (await client.get(f"{PORTAL}/claims?days=30", headers=portal_headers)).json()["data"]
+    row = next(r for r in rows if r["claimRef"] == "CG-00291")
+    # Disputed by the member too: the request still wins so the provider can answer.
+    assert row["status"] == "INFO_NEEDED"
+    assert row["infoRequest"] == "Please send the signed prescription."
 
 
 async def test_decided_claim_cannot_be_sent_back(client: AsyncClient, auth_headers: dict):

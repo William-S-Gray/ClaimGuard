@@ -108,7 +108,7 @@ export interface Claim {
   memberResponse: MemberResponseStatus;
   memberRating?: number | null; // 1-5, after the member confirms
   agentNotes?: string;
-  slaDeadline: string;
+  slaDeadline: string | null; // null while paused (Info needed)
   timeline: TimelineEvent[];
 }
 
