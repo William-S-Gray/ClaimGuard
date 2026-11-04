@@ -35,3 +35,11 @@ async def test_ussd_counts_add_up(client: AsyncClient, auth_headers: dict):
     assert set(data) == {"alertsSent", "confirmed", "disputed", "awaitingReply"}
     assert data["confirmed"] + data["disputed"] + data["awaitingReply"] == data["alertsSent"]
     assert min(data.values()) >= 0
+
+
+async def test_member_alerts_counts_disputed_replies(client: AsyncClient, auth_headers: dict):
+    data = (await client.get("/api/v1/dashboard/metrics", headers=auth_headers)).json()["data"]
+
+    # The seed's CG-00291 was disputed over WhatsApp. A dispute is stored as the
+    # member's reply, never as a decision, so the card used to read 0.
+    assert data["memberAlerts"] >= 1
