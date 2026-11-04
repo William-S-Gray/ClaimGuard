@@ -104,6 +104,9 @@ class Settings(BaseSettings):
     twilio_account_sid: str = ""
     twilio_auth_token: str = ""
     twilio_whatsapp_from: str = ""  # e.g. +14155238886
+    # SMS / USSD gateway (vendor-neutral). Inbound webhooks must send this value
+    # in the X-Gateway-Token header; empty disables them.
+    gateway_webhook_secret: str = ""
 
     @property
     def email_configured(self) -> bool:

@@ -24,14 +24,18 @@ class ChannelAdapter(Protocol):
 
 
 class _LoggingAdapter:
-    """No-op adapter — logs the dispatch. Used when a channel isn't configured."""
+    """Unconfigured channel: logs the dispatch and reports it as NOT delivered.
+
+    Returning False is what lets the member-alert fallback move on to the next
+    channel, and keeps "delivered" honest when nothing actually went out.
+    """
 
     def __init__(self, channel: str) -> None:
         self.channel = channel
 
     async def send(self, to: str, title: str, message: str) -> bool:
         log.info("notification.dispatch", channel=self.channel, to=to, title=title)
-        return True
+        return False
 
 
 class SMTPEmailAdapter:
@@ -74,7 +78,7 @@ class TwilioWhatsAppAdapter:
         )
         form = {
             "From": f"whatsapp:{settings.twilio_whatsapp_from}",
-            "To": f"whatsapp:{to}",
+            "To": f"whatsapp:{to.replace(' ', '')}",  # Twilio needs E.164
             "Body": f"*{title}*\n\n{message}",
         }
         async with httpx.AsyncClient(timeout=15) as client:

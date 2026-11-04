@@ -1,8 +1,9 @@
 """API v1 router aggregation.
 
 Security posture: this is a PHI system, so **every data endpoint requires
-authentication**. Only health checks, the auth flow, and the (separately
-token-authenticated) WebSocket are mounted without the global auth dependency.
+authentication**. Only health checks, the auth flow, the (separately
+token-authenticated) WebSocket and signature-verified webhooks are mounted
+without the global auth dependency.
 """
 from fastapi import APIRouter, Depends
 
@@ -20,6 +21,7 @@ from app.api.v1 import (
     providers,
     trustscore,
     users,
+    webhooks,
     websocket,
 )
 from app.core.config import settings
@@ -31,6 +33,7 @@ api_router = APIRouter()
 api_router.include_router(health.router)     # liveness/readiness probes
 api_router.include_router(auth.router)        # login / refresh / logout
 api_router.include_router(websocket.router)   # authenticates via token on connect
+api_router.include_router(webhooks.router)    # authenticates via provider signature
 
 # ── Authenticated (PHI + actions) ───────────────────────────────────────────────
 protected = [Depends(get_current_user)]

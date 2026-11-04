@@ -49,6 +49,26 @@ class ClaimRepository(BaseRepository[Claim]):
         stmt = self._base_query().where(Claim.claim_ref == claim_ref)
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
+    async def pending_alert_for_phone(self, phone: str) -> Claim | None:
+        """The most recently alerted claim still awaiting this member's reply.
+
+        `phone` is E.164 without spaces; stored numbers may contain spaces.
+        """
+        # ponytail: a reply always answers the latest open alert; if members get
+        # several alerts at once, put the claim ref in the message and match on it.
+        stmt = (
+            self._base_query()
+            .join(Member, Claim.member_id == Member.id)
+            .where(
+                func.replace(Member.phone, " ", "") == phone,
+                Claim.member_notification_sent.is_(True),
+                Claim.member_response == "PENDING",
+            )
+            .order_by(Claim.updated_at.desc())
+            .limit(1)
+        )
+        return (await self.session.execute(stmt)).scalars().first()
+
     async def query_queue(
         self,
         *,
