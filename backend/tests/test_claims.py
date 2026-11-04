@@ -173,6 +173,24 @@ async def test_fraudshield_score_endpoint(client: AsyncClient, auth_headers: dic
     assert data["riskScore"] >= 50
     assert data["aiExplanation"]
 
+    audit = await client.get(
+        "/api/v1/audit?entity_type=claim&pageSize=200", headers=auth_headers
+    )
+    assert any(
+        e["action"] == "fraudshield.score" and e["entityId"] == "TEST-1"
+        for e in audit.json()["data"]
+    ), "every score should leave an audit row"
+
+
+async def test_fraudshield_score_rejects_bad_input(
+    client: AsyncClient, auth_headers: dict
+):
+    for bad in ({"claimedAmount": -5}, {"claimedAmount": 10, "providerTrustScore": 140}):
+        resp = await client.post(
+            "/api/v1/fraudshield/score", headers=auth_headers, json=bad
+        )
+        assert resp.status_code == 422, bad
+
 
 async def test_dashboard_metrics(client: AsyncClient, auth_headers: dict):
     resp = await client.get("/api/v1/dashboard/metrics", headers=auth_headers)
