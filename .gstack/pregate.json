@@ -1,0 +1,52 @@
+{
+  "$schema": "https://github.com/garrytan/gstack/docs/pregate.md#pregate-v1",
+  "runner": "backend/.venv/bin/python -m pytest -q {files}",
+  "timeout_s": 900,
+  "dependencies": {
+    "backend/**": [
+      "backend/tests/test_audit.py",
+      "backend/tests/test_auth.py",
+      "backend/tests/test_claims.py",
+      "backend/tests/test_dashboard.py",
+      "backend/tests/test_demo_activity.py",
+      "backend/tests/test_fraudshield.py",
+      "backend/tests/test_fraudshield_ml.py",
+      "backend/tests/test_health.py",
+      "backend/tests/test_ingestion.py",
+      "backend/tests/test_investigator_dashboard.py",
+      "backend/tests/test_member_alerts.py",
+      "backend/tests/test_notifications_delivery.py",
+      "backend/tests/test_provider_portal.py",
+      "backend/tests/test_rbac.py",
+      "backend/tests/test_reads.py",
+      "backend/tests/test_security.py",
+      "backend/tests/test_sms_ussd.py",
+      "backend/tests/test_trustscore.py",
+      "backend/tests/test_websocket.py"
+    ],
+    "frontend/**": [],
+    ".github/**": [],
+    ".gitignore": [],
+    ".gstack/**": []
+  },
+  "guards": [
+    {
+      "id": "frontend-typecheck",
+      "when": [
+        "frontend/src/**",
+        "frontend/package.json",
+        "frontend/package-lock.json",
+        "frontend/tsconfig*.json",
+        "frontend/vite.config.ts"
+      ],
+      "command": "cd frontend && npx tsc --noEmit -p .",
+      "fix": "run `cd frontend && npx tsc --noEmit -p .` and fix the type errors",
+      "timeout_s": 300
+    }
+  ],
+  "strays": {
+    "allow": [
+      ".gstack"
+    ]
+  }
+}
