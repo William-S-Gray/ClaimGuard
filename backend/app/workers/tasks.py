@@ -62,7 +62,7 @@ def recalculate_all_trustscores() -> dict:
             providers = await service.repo.all_ranked()
             count = 0
             for p in providers:
-                await service.recalculate(p.code)
+                await service.recalculate(p.code, reason="nightly")
                 count += 1
             await session.commit()
             return {"recalculated": count}

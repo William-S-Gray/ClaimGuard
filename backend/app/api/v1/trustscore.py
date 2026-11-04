@@ -23,6 +23,11 @@ async def summary(db: DbSession) -> dict:
     return success(await ProviderService(db).summary(), "TrustScore summary")
 
 
+@router.get("/{code}/history", summary="Score trend, peer percentile and confidence")
+async def history(code: str, db: DbSession) -> dict:
+    return success(await ProviderService(db).history(code), "TrustScore history")
+
+
 @router.post(
     "/{code}/recalculate",
     summary="Recompute a provider's TrustScore (admin/analyst)",
