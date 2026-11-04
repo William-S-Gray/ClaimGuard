@@ -96,6 +96,32 @@ class ClaimRepository(BaseRepository[Claim]):
         )
         return (await self.session.execute(stmt)).scalars().first()
 
+    async def awaiting_rating_for_phone(self, phone: str) -> Claim | None:
+        """The latest claim this member confirmed in the past week but hasn't rated."""
+        stmt = (
+            self._base_query()
+            .join(Member, Claim.member_id == Member.id)
+            .where(
+                func.replace(Member.phone, " ", "") == phone,
+                Claim.member_response == "CONFIRMED",
+                Claim.member_rating.is_(None),
+                Claim.updated_at >= datetime.now(UTC) - timedelta(days=7),
+            )
+            .order_by(Claim.updated_at.desc())
+            .limit(1)
+        )
+        return (await self.session.execute(stmt)).scalars().first()
+
+    async def rating_stats(self, provider_id: uuid.UUID | None = None) -> tuple[float | None, int]:
+        """(average 1-5 member rating, number of ratings), optionally for one provider."""
+        stmt = select(func.avg(Claim.member_rating), func.count(Claim.member_rating)).where(
+            Claim.deleted_at.is_(None), Claim.member_rating.is_not(None)
+        )
+        if provider_id:
+            stmt = stmt.where(Claim.provider_id == provider_id)
+        avg, count = (await self.session.execute(stmt)).one()
+        return (round(float(avg), 1) if avg is not None else None), int(count)
+
     async def query_queue(
         self,
         *,

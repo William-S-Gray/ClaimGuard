@@ -10,6 +10,8 @@ class DashboardMetrics(CamelModel):
     flagged_today: int
     estimated_saved: float
     member_alerts: int
+    member_rating_avg: float | None = None  # 1-5
+    member_ratings: int = 0
     pending_investigation: int
     auto_approved_today: int
     avg_latency_ms: int

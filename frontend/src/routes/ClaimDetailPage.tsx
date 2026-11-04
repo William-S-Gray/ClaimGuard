@@ -1,6 +1,7 @@
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, Link, useNavigate } from '@tanstack/react-router';
-import { fetchClaimByRef, approveClaim, rejectClaim, openInvestigation } from '@/lib/api';
+import { fetchClaimByRef, approveClaim, rejectClaim, openInvestigation, requestClaimInfo } from '@/lib/api';
 import { AppShell } from '@/components/layout/AppShell';
 import { RiskScoreRing } from '@/components/shared/RiskScoreRing';
 import { StatusBadge, PriorityBadge, ChannelBadge } from '@/components/shared/Badges';
@@ -12,7 +13,7 @@ import { Skeleton } from '@/components/shared/SkeletonLoader';
 import { useAuthStore } from '@/stores/authStore';
 import { ApiError } from '@/lib/apiClient';
 import { formatCurrency, formatDate, formatDateTime, formatTimeAgo } from '@/lib/formatters';
-import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, Clock, Loader2, FolderSearch } from 'lucide-react';
+import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, Clock, Loader2, FolderSearch, MessageSquareMore } from 'lucide-react';
 
 export function ClaimDetailPage() {
   const { claimRef } = useParams({ from: '/queue/$claimRef' });
@@ -305,6 +306,8 @@ export function ClaimDetailPage() {
                 </div>
               )}
 
+              {canApprove && <RequestInfo claimRef={claim.claimRef} decision={claim.decision} onDone={invalidateAll} />}
+
               {canInvestigate && (
                 <button
                   className="btn-secondary w-full justify-center mt-2 text-brand-navy border-brand-navy/20 bg-brand-navy/5 hover:bg-brand-navy/10"
@@ -358,8 +361,13 @@ export function ClaimDetailPage() {
                   <span className="text-xs text-gray-400">Cimas is protecting your benefits. Ref: {claim.claimRef}.</span>
                 </div>
                 {claim.memberResponse !== 'PENDING' && (
-                  <div className="mt-3">
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
                     <MemberResponseBadge status={claim.memberResponse} />
+                    {claim.memberRating != null && (
+                      <span className="badge text-xs bg-amber-50 text-amber-700 border-amber-200">
+                        Care rated {claim.memberRating}/5
+                      </span>
+                    )}
                   </div>
                 )}
               </div>
@@ -394,6 +402,69 @@ export function ClaimDetailPage() {
         </div>
       </div>
     </AppShell>
+  );
+}
+
+const DECIDED = ['APPROVE', 'REJECT_FRAUD', 'REJECT_ERROR'];
+
+function RequestInfo({ claimRef, decision, onDone }: { claimRef: string; decision: string; onDone: () => void }) {
+  const [open, setOpen] = useState(false);
+  const [message, setMessage] = useState('');
+  const ask = useMutation({
+    mutationFn: () => requestClaimInfo(claimRef, message.trim()),
+    onSuccess: () => {
+      setOpen(false);
+      setMessage('');
+      onDone();
+    },
+  });
+
+  if (decision === 'INFO_NEEDED') {
+    return (
+      <p className="mt-2 text-xs text-sky-800 bg-sky-50 border border-sky-100 rounded-lg p-2">
+        Waiting on the provider. Their answer appears in the timeline and the claim returns to review.
+      </p>
+    );
+  }
+  if (DECIDED.includes(decision)) return null;
+  if (!open) {
+    return (
+      <button type="button" className="btn-secondary w-full justify-center mt-2" onClick={() => setOpen(true)}>
+        <MessageSquareMore size={15} /> Request info from provider
+      </button>
+    );
+  }
+  return (
+    <div className="mt-2 space-y-2">
+      <label htmlFor="info-message" className="block text-xs font-medium text-gray-600">
+        What do you need? (the provider sees this)
+      </label>
+      <textarea
+        id="info-message"
+        className="form-input min-h-[64px] text-sm"
+        value={message}
+        maxLength={1000}
+        onChange={(e) => setMessage(e.target.value)}
+      />
+      {ask.isError && (
+        <p className="text-xs text-red-600" role="alert">
+          {(ask.error as ApiError).message ?? 'Could not send the request.'}
+        </p>
+      )}
+      <div className="flex gap-2">
+        <button
+          type="button"
+          className="btn-primary flex-1 justify-center"
+          disabled={message.trim().length < 5 || ask.isPending}
+          onClick={() => ask.mutate()}
+        >
+          {ask.isPending && <Loader2 size={15} className="animate-spin" />} Send request
+        </button>
+        <button type="button" className="btn-secondary" onClick={() => setOpen(false)}>
+          Cancel
+        </button>
+      </div>
+    </div>
   );
 }
 

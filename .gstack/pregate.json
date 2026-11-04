@@ -12,6 +12,7 @@
       "backend/tests/test_fraudshield.py",
       "backend/tests/test_fraudshield_ml.py",
       "backend/tests/test_health.py",
+      "backend/tests/test_info_needed_and_ratings.py",
       "backend/tests/test_ingestion.py",
       "backend/tests/test_investigator_dashboard.py",
       "backend/tests/test_member_alerts.py",

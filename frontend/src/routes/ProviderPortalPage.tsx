@@ -8,6 +8,7 @@ import {
   fetchPortalClaims,
   fetchPortalDashboard,
   submitPortalAppeal,
+  supplyPortalInfo,
   type PortalClaim,
 } from '@/lib/api';
 import { useAuthStore } from '@/stores/authStore';
@@ -23,12 +24,14 @@ const STATUS_STYLE: Record<PortalClaim['status'], string> = {
   UNDER_REVIEW: 'bg-amber-50 text-amber-700',
   DISPUTED: 'bg-red-50 text-red-700',
   REJECTED: 'bg-gray-100 text-gray-700',
+  INFO_NEEDED: 'bg-sky-50 text-sky-700',
 };
 const STATUS_LABEL: Record<PortalClaim['status'], string> = {
   APPROVED: 'Approved',
   UNDER_REVIEW: 'Under review',
   DISPUTED: 'Disputed',
   REJECTED: 'Rejected',
+  INFO_NEEDED: 'Info needed',
 };
 
 function pct(value: number | null, empty: string) {
@@ -54,6 +57,39 @@ function Stat({ label, value, hint }: { label: string; value: string; hint?: str
       <p className="text-xs text-gray-500">{label}</p>
       <p className="text-xl font-semibold text-gray-900">{value}</p>
       {hint && <p className="text-[11px] text-gray-400">{hint}</p>}
+    </div>
+  );
+}
+
+function InfoReply({ claim }: { claim: PortalClaim }) {
+  const qc = useQueryClient();
+  const [text, setText] = useState('');
+  const send = useMutation({
+    mutationFn: () => supplyPortalInfo(claim.claimRef, text.trim()),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['portal-claims'] }),
+  });
+  const id = `info-${claim.claimRef}`;
+  return (
+    <div className="mt-2 max-w-xs">
+      <p className="text-[11px] text-sky-800">{claim.infoRequest}</p>
+      <label htmlFor={id} className="sr-only">Your answer for {claim.claimRef}</label>
+      <textarea
+        id={id}
+        className="form-input mt-1 min-h-[52px] text-xs"
+        placeholder="Your answer"
+        value={text}
+        maxLength={2000}
+        onChange={(e) => setText(e.target.value)}
+      />
+      {send.isError && <p className="text-[11px] text-red-600" role="alert">Could not send. Try again.</p>}
+      <button
+        type="button"
+        className="btn-primary mt-1 text-xs"
+        disabled={text.trim().length < 5 || send.isPending}
+        onClick={() => send.mutate()}
+      >
+        Send answer
+      </button>
     </div>
   );
 }
@@ -209,7 +245,11 @@ export function ProviderPortalPage() {
                     value={pct(d.breakdown.investigationSuccess, 'No cases')}
                     hint={`${d.breakdown.investigationsClosed} closed cases found legitimate`}
                   />
-                  <Stat label="Member satisfaction" value={pct(d.breakdown.memberSatisfaction, 'Not rated')} hint="Ratings aren't collected yet" />
+                  <Stat
+                    label="Member satisfaction"
+                    value={d.breakdown.memberSatisfaction === null ? 'Not rated' : `${d.breakdown.memberSatisfaction.toFixed(1)} / 5`}
+                    hint={`${d.breakdown.memberRatings} member rating${d.breakdown.memberRatings === 1 ? '' : 's'}`}
+                  />
                   <Stat label="Shortfall index" value={d.breakdown.shortfallIndex.toFixed(2)} hint="1.00 = members pay what's expected" />
                   <Stat label="Flagged claims (90 days)" value={String(d.breakdown.flags90d)} />
                   <Stat
@@ -273,6 +313,7 @@ export function ProviderPortalPage() {
                         <td>
                           <span className={`badge ${STATUS_STYLE[c.status]}`}>{STATUS_LABEL[c.status]}</span>
                           {c.disputeReason && <p className="text-[11px] text-red-600 mt-1">{c.disputeReason}</p>}
+                          {c.status === 'INFO_NEEDED' && <InfoReply claim={c} />}
                         </td>
                       </tr>
                     ))}

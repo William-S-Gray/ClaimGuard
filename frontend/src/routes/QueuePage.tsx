@@ -30,6 +30,7 @@ const STATUSES: Array<{ label: string; value: ClaimDecision | 'ALL' }> = [
   { label: 'Investigating', value: 'PEND_INVESTIGATE' },
   { label: 'Pending Verify', value: 'PEND_VERIFY' },
   { label: 'Disputed', value: 'MEMBER_DISPUTED' },
+  { label: 'Info needed', value: 'INFO_NEEDED' },
   { label: 'Approved', value: 'APPROVE' },
 ];
 

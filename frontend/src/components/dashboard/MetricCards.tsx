@@ -69,7 +69,12 @@ export function MetricCards() {
       subtitle: 'Claims disputed by members',
       icon: <MessageCircleWarning size={20} />,
       accentColor: '#7B2D8B',
-      trend: { value: 'WhatsApp · USSD · App', positive: true },
+      trend: {
+        value: data.memberRatingAvg === null
+          ? 'No care ratings yet'
+          : `Care rated ${data.memberRatingAvg.toFixed(1)}/5 (${formatNumber(data.memberRatings)})`,
+        positive: (data.memberRatingAvg ?? 5) >= 3,
+      },
     },
   ];
 

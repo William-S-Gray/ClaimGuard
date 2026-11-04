@@ -1,7 +1,7 @@
 // ─── Risk & Decision ────────────────────────────────────────────────────────
 
 export type RiskLevel = 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL';
-export type ClaimDecision = 'APPROVE' | 'PEND_VERIFY' | 'PEND_INVESTIGATE' | 'REJECT_FRAUD' | 'REJECT_ERROR' | 'MEMBER_DISPUTED' | 'ESCALATED';
+export type ClaimDecision = 'APPROVE' | 'PEND_VERIFY' | 'PEND_INVESTIGATE' | 'REJECT_FRAUD' | 'REJECT_ERROR' | 'MEMBER_DISPUTED' | 'ESCALATED' | 'INFO_NEEDED';
 export type ClaimStatus = ClaimDecision | 'SUBMITTED' | 'PROCESSING';
 
 // ─── Flags ──────────────────────────────────────────────────────────────────
@@ -106,6 +106,7 @@ export interface Claim {
   memberNotificationSent: boolean;
   memberNotificationChannel?: Channel;
   memberResponse: MemberResponseStatus;
+  memberRating?: number | null; // 1-5, after the member confirms
   agentNotes?: string;
   slaDeadline: string;
   timeline: TimelineEvent[];
@@ -146,6 +147,8 @@ export interface DashboardMetrics {
   flaggedToday: number;
   estimatedSaved: number;
   memberAlerts: number;
+  memberRatingAvg: number | null;
+  memberRatings: number;
   pendingInvestigation: number;
   autoApprovedToday: number;
   avgLatencyMs: number;
