@@ -11,6 +11,9 @@ from app.models.member import Member
 from app.models.provider import Provider
 from app.repositories.base import BaseRepository
 
+# Decisions whose claimed amount counts as loss avoided: rejected, or held for investigation.
+SAVED_DECISIONS = ("REJECT_FRAUD", "REJECT_ERROR", "PEND_INVESTIGATE")
+
 
 class ClaimRepository(BaseRepository[Claim]):
     model = Claim
@@ -103,6 +106,32 @@ class ClaimRepository(BaseRepository[Claim]):
     async def count_by_decision(self, decision: str) -> int:
         return await self._count_where(Claim.decision == decision)
 
+    async def count_by_decision_since(self, decision: str, since: datetime) -> int:
+        return await self._count_where(
+            Claim.decision == decision, Claim.submitted_at >= since
+        )
+
+    async def count_member_alerts(
+        self, channel: str | None = None, response: str | None = None
+    ) -> int:
+        """Claims whose member was sent a verification alert, optionally by channel/reply."""
+        conditions = [Claim.member_notification_sent.is_(True)]
+        if channel:
+            conditions.append(Claim.member_notification_channel == channel)
+        if response:
+            conditions.append(Claim.member_response == response)
+        return await self._count_where(*conditions)
+
+    async def saved_amounts_since(self, since: datetime) -> list[tuple[datetime, float]]:
+        """(submitted_at, claimed_amount) for every claim counted as loss avoided."""
+        stmt = select(Claim.submitted_at, Claim.claimed_amount).where(
+            Claim.deleted_at.is_(None),
+            Claim.decision.in_(SAVED_DECISIONS),
+            Claim.submitted_at >= since,
+        )
+        rows = (await self.session.execute(stmt)).all()
+        return [(at, float(amount)) for at, amount in rows]
+
     async def avg_latency(self) -> float:
         stmt = select(func.avg(Claim.latency_ms)).where(Claim.deleted_at.is_(None))
         val = (await self.session.execute(stmt)).scalar_one_or_none()
@@ -112,7 +141,7 @@ class ClaimRepository(BaseRepository[Claim]):
         """Sum of claimed amounts on rejected/investigated claims (loss avoided)."""
         stmt = select(func.coalesce(func.sum(Claim.claimed_amount), 0)).where(
             Claim.deleted_at.is_(None),
-            Claim.decision.in_(["REJECT_FRAUD", "REJECT_ERROR", "PEND_INVESTIGATE"]),
+            Claim.decision.in_(SAVED_DECISIONS),
         )
         return float((await self.session.execute(stmt)).scalar_one())
 

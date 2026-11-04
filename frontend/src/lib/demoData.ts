@@ -1,6 +1,5 @@
 import type {
-  Member, Provider, Claim, DashboardMetrics, SavingsDataPoint,
-  USSDStats, DemoScenario, TrustBadge,
+  Member, Provider, Claim, DemoScenario, TrustBadge,
 } from '@/types';
 
 // ─── Members ──────────────────────────────────────────────────────────────────
@@ -369,47 +368,6 @@ export const CLAIMS: Claim[] = [
     ],
   },
 ];
-
-// ─── Dashboard Metrics ────────────────────────────────────────────────────────
-
-export const DASHBOARD_METRICS: DashboardMetrics = {
-  claimsToday: 4291,
-  flaggedToday: 47,
-  estimatedSaved: 3841,
-  memberAlerts: 3,
-  pendingInvestigation: 12,
-  autoApprovedToday: 4198,
-  avgLatencyMs: 387,
-  detectionRate: 94.2,
-};
-
-// ─── Savings Data ─────────────────────────────────────────────────────────────
-
-export const SAVINGS_DATA: SavingsDataPoint[] = [
-  { month: 'Jan', savings: 24200, cumulative: 24200, target: 30000 },
-  { month: 'Feb', savings: 31800, cumulative: 56000, target: 60000 },
-  { month: 'Mar', savings: 28400, cumulative: 84400, target: 90000 },
-  { month: 'Apr', savings: 41200, cumulative: 125600, target: 120000 },
-  { month: 'May', savings: 38900, cumulative: 164500, target: 150000 },
-  { month: 'Jun', savings: 51400, cumulative: 215900, target: 180000 },
-  { month: 'Jul', savings: 0, cumulative: 0, target: 210000 },
-  { month: 'Aug', savings: 0, cumulative: 0, target: 240000 },
-  { month: 'Sep', savings: 0, cumulative: 0, target: 270000 },
-];
-
-// ─── USSD Stats ───────────────────────────────────────────────────────────────
-
-export const USSD_STATS: USSDStats = {
-  totalSessions: 47,
-  confirmations: 12,
-  disputes: 3,
-  completed: 32,
-  carriers: {
-    econet: 23,
-    netone: 15,
-    telecel: 9,
-  },
-};
 
 // ─── Demo Scenarios ───────────────────────────────────────────────────────────
 

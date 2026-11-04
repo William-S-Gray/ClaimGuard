@@ -6,6 +6,7 @@ from app.schemas.common import CamelModel
 
 class DashboardMetrics(CamelModel):
     claims_today: int
+    claims_yesterday: int
     flagged_today: int
     estimated_saved: float
     member_alerts: int
@@ -19,15 +20,15 @@ class SavingsDataPoint(CamelModel):
     month: str
     savings: float
     cumulative: float
-    target: float
 
 
 class USSDStats(CamelModel):
-    total_sessions: int
-    confirmations: int
-    disputes: int
-    completed: int
-    carriers: dict[str, int]
+    """Member verification alerts sent over USSD, and how members replied."""
+
+    alerts_sent: int
+    confirmed: int
+    disputed: int
+    awaiting_reply: int
 
 
 class FraudTrendPoint(CamelModel):

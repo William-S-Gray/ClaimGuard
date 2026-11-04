@@ -134,6 +134,7 @@ export interface TimelineEvent {
 
 export interface DashboardMetrics {
   claimsToday: number;
+  claimsYesterday: number;
   flaggedToday: number;
   estimatedSaved: number;
   memberAlerts: number;
@@ -147,7 +148,6 @@ export interface SavingsDataPoint {
   month: string;
   savings: number;
   cumulative: number;
-  target: number;
 }
 
 // ─── Queue ────────────────────────────────────────────────────────────────────
@@ -162,16 +162,12 @@ export interface QueueFilters {
 
 // ─── USSD ─────────────────────────────────────────────────────────────────────
 
+/** Member verification alerts sent over USSD, and how members replied. */
 export interface USSDStats {
-  totalSessions: number;
-  confirmations: number;
-  disputes: number;
-  completed: number;
-  carriers: {
-    econet: number;
-    netone: number;
-    telecel: number;
-  };
+  alertsSent: number;
+  confirmed: number;
+  disputed: number;
+  awaitingReply: number;
 }
 
 // ─── Demo ─────────────────────────────────────────────────────────────────────

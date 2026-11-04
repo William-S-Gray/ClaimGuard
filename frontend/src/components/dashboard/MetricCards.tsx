@@ -25,6 +25,12 @@ export function MetricCards() {
     return <ErrorState onRetry={refetch} />;
   }
 
+  // Compared with yesterday's real count; there is nothing to compare when yesterday had none.
+  const change =
+    data.claimsYesterday > 0
+      ? Math.round(((data.claimsToday - data.claimsYesterday) / data.claimsYesterday) * 100)
+      : null;
+
   const cards = [
     {
       title: 'Claims Today',
@@ -32,7 +38,9 @@ export function MetricCards() {
       subtitle: `${formatNumber(data.autoApprovedToday)} auto-approved`,
       icon: <FileText size={20} />,
       accentColor: '#1A4D8F',
-      trend: { value: '+12% vs yesterday', positive: true },
+      trend: change === null
+        ? { value: 'None yesterday to compare', positive: true }
+        : { value: `${change >= 0 ? '+' : ''}${change}% vs yesterday`, positive: change >= 0 },
     },
     {
       title: 'Flagged',
@@ -50,15 +58,15 @@ export function MetricCards() {
     {
       title: 'Estimated Saved',
       value: formatCurrency(data.estimatedSaved),
-      subtitle: 'Q3 running total: $215,900',
+      subtitle: 'Claims rejected or held for investigation',
       icon: <DollarSign size={20} />,
       accentColor: '#16A34A',
-      trend: { value: '↑ On track for Q3 target', positive: true },
+      trend: { value: 'All time', positive: true },
     },
     {
       title: 'Member Alerts',
       value: String(data.memberAlerts),
-      subtitle: `${data.memberAlerts} disputed this week`,
+      subtitle: 'Claims disputed by members',
       icon: <MessageCircleWarning size={20} />,
       accentColor: '#7B2D8B',
       trend: { value: 'WhatsApp · USSD · App', positive: true },
