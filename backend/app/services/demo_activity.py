@@ -165,6 +165,7 @@ def _play_forward(rng: random.Random, claim: Claim, at: datetime, now: datetime)
                     reply, "Member confirmed claim",
                     f"Member confirmed the service via {channel}", "member", "member",
                 ))
+                _rate(claim, reply)
                 if age > timedelta(days=3):
                     claim.decision = "APPROVE"
                     claim.approved_amount = claim.claimed_amount
@@ -286,6 +287,29 @@ def _build_claim(
     ))
     _play_forward(rng, claim, at, now)
     return claim
+
+
+def _rate(claim: Claim, at: datetime) -> None:
+    """Most members who confirm also rate their care; better providers rate higher.
+
+    Uses its own generator keyed on the claim ref, so adding ratings doesn't
+    shift the shared one and change the rest of the generated history.
+    """
+    r = random.Random(claim.claim_ref)
+    if r.random() < 0.3:
+        return  # didn't answer the rating question
+    trust = claim.provider.trust_score
+    if trust >= 80:
+        choices = [3, 4, 4, 5, 5]
+    elif trust >= 60:
+        choices = [2, 3, 3, 4, 5]
+    else:
+        choices = [1, 2, 3, 3, 4]
+    claim.member_rating = r.choice(choices)
+    claim.timeline.append(_event(
+        at + timedelta(minutes=2), "Member rated care",
+        f"{claim.member_rating}/5 for {claim.provider.name}", "member", "member",
+    ))
 
 
 def _require_demo_mode() -> None:

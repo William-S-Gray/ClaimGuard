@@ -173,7 +173,7 @@ CLAIMS = [
         "risk_score": 18, "risk_level": "LOW", "decision": "APPROVE",
         "priority": "LOW", "latency_ms": 310,
         "member_notification_sent": False, "member_response": "CONFIRMED",
-        "sla_deadline": "2026-07-03T09:05:00Z",
+        "member_rating": 5, "sla_deadline": "2026-07-03T09:05:00Z",
         "ai_explanation": (
             "This claim meets all verification criteria. The medications are consistent "
             "with the member's registered hypertension condition. Shortfall is within "
@@ -230,7 +230,7 @@ CLAIMS = [
         "risk_score": 22, "risk_level": "LOW", "decision": "APPROVE",
         "priority": "LOW", "latency_ms": 290,
         "member_notification_sent": False, "member_response": "CONFIRMED",
-        "sla_deadline": "2026-07-01T11:10:00Z",
+        "member_rating": 4, "sla_deadline": "2026-07-01T11:10:00Z",
         "ai_explanation": (
             "Clean claim. Medications align with registered hypertension condition. "
             "Provider TrustScore 78 is within acceptable range."
@@ -245,6 +245,57 @@ CLAIMS = [
             ("Condition registered matches Rx", -0.40, "negative"),
             ("Claim value within norms", -0.35, "negative"),
             ("Provider history acceptable", -0.25, "negative"),
+        ],
+    },
+    {
+        # Sent back to City Pharmacy (the demo portal login) for a prescription.
+        "id": "clm-006", "claim_ref": "CG-00517", "nh263_ref": "NH263-2026-0044850",
+        "member_id": "mem-003", "provider_id": "prov-001",
+        "service_date": "2026-07-01", "submitted_at": "2026-07-01T10:30:00Z",
+        "claimed_amount": 64.00, "member_shortfall": 14.00,
+        "expected_shortfall_min": 8, "expected_shortfall_max": 12,
+        "risk_score": 58, "risk_level": "MEDIUM", "decision": "INFO_NEEDED",
+        "priority": "MEDIUM", "latency_ms": 380,
+        "member_response": "PENDING", "sla_deadline": None,
+        "ai_explanation": (
+            "Two months of a chronic medication were dispensed at once with no "
+            "prescription on file for the second month. Shortfall is slightly above "
+            "the expected range for this provider."
+        ),
+        "flags": [("STATISTICAL_ANOMALY_DETECTED", "MEDIUM")],
+        "items": [("Metformin 500mg x 60", 2, 32.00, 64.00, None, "726300001")],
+        "shap": [
+            ("Quantity vs usual supply", 0.31, "positive"),
+            ("Shortfall vs expected range", 0.17, "positive"),
+            ("Member claim history consistent", -0.12, "negative"),
+        ],
+        "info_request": {
+            "at": "2026-07-01T15:00:00Z", "actor": "Farai Nyathi",
+            "message": "Please send the prescription covering the second month of Metformin.",
+            "previous_decision": "PEND_VERIFY", "sla_left_hours": 30,
+        },
+    },
+    {
+        # Confirmed and rated by the member, so the portal's satisfaction score has data.
+        "id": "clm-007", "claim_ref": "CG-00603", "nh263_ref": "NH263-2026-0044871",
+        "member_id": "mem-002", "provider_id": "prov-001",
+        "service_date": "2026-07-02", "submitted_at": "2026-07-02T09:15:00Z",
+        "claimed_amount": 18.00, "approved_amount": 18.00, "member_shortfall": 4.00,
+        "expected_shortfall_min": 3, "expected_shortfall_max": 6,
+        "risk_score": 21, "risk_level": "LOW", "decision": "APPROVE",
+        "priority": "LOW", "latency_ms": 300,
+        "member_notification_sent": True, "member_notification_channel": "USSD",
+        "member_response": "CONFIRMED", "member_rating": 4,
+        "sla_deadline": "2026-07-04T09:15:00Z",
+        "ai_explanation": (
+            "Routine refill consistent with the member's registered hypertension. "
+            "Shortfall is within the expected range."
+        ),
+        "flags": [],
+        "items": [("Amlodipine 5mg x 30", 1, 18.00, 18.00, None, "726200001")],
+        "shap": [
+            ("Condition matches medication", -0.32, "negative"),
+            ("Shortfall within range", -0.22, "negative"),
         ],
     },
 ]

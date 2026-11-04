@@ -66,7 +66,7 @@ async def test_dashboard_shows_own_provider(client: AsyncClient, portal_headers:
     assert {"claimAccuracy", "investigationSuccess", "memberSatisfaction"} <= set(
         data["breakdown"]
     )
-    assert data["breakdown"]["memberSatisfaction"] is None
+    assert data["breakdown"]["memberSatisfaction"] == 4.0  # the seeded CG-00603
     assert data["peers"]["count"] >= 1
     assert isinstance(data["history"], list)
 
