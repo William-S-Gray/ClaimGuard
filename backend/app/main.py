@@ -1,6 +1,7 @@
 """ClaimGuard 360° — FastAPI application factory & lifecycle."""
 from __future__ import annotations
 
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -13,6 +14,7 @@ from app.core.logging import configure_logging, get_logger
 from app.core.middleware import register_middleware
 from app.core.redis import redis_client
 from app.core.websocket import manager
+from app.services.demo_activity import ensure_recent_activity
 
 log = get_logger(__name__)
 
@@ -29,7 +31,12 @@ async def lifespan(_: FastAPI):
         env=settings.environment,
         version=settings.version,
     )
+    # Demo deployments only: give the last week its sample claims in the
+    # background, so a host waking from sleep doesn't block on it.
+    top_up = asyncio.create_task(ensure_recent_activity()) if settings.demo_mode else None
     yield
+    if top_up:
+        await top_up
     await manager.stop_subscriber()
     await redis_client.close()
     log.info("app.shutdown")
