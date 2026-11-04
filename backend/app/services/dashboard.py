@@ -33,6 +33,7 @@ class DashboardService:
         # decision, so counting decision == "MEMBER_DISPUTED" always gave 0.
         disputed = await self.claims.count_member_alerts(response="DISPUTED")
         avg_latency = await self.claims.avg_latency()
+        rating_avg, ratings = await self.claims.rating_stats()
         saved = await self.claims.sum_estimated_saved()
 
         total = max(claims_today, 1)
@@ -44,6 +45,8 @@ class DashboardService:
             flagged_today=flagged_today,
             estimated_saved=round(saved, 2),
             member_alerts=disputed,
+            member_rating_avg=rating_avg,
+            member_ratings=ratings,
             pending_investigation=pending,
             auto_approved_today=auto_approved,
             avg_latency_ms=int(avg_latency),

@@ -77,6 +77,7 @@ class ClaimSummary(CamelModel):
     member_notification_sent: bool = False
     member_notification_channel: str | None = None
     member_response: str = "PENDING"
+    member_rating: int | None = None
 
 
 class ClaimOut(ClaimSummary):
@@ -153,6 +154,7 @@ def claim_to_summary(claim: Claim) -> dict:
         member_notification_sent=claim.member_notification_sent,
         member_notification_channel=claim.member_notification_channel,
         member_response=claim.member_response,
+        member_rating=claim.member_rating,
     ).model_dump(by_alias=True)
 
 
@@ -196,6 +198,7 @@ def claim_to_detail(claim: Claim) -> dict:
         member_notification_sent=claim.member_notification_sent,
         member_notification_channel=claim.member_notification_channel,
         member_response=claim.member_response,
+        member_rating=claim.member_rating,
         agent_notes=claim.agent_notes,
         sla_deadline=claim.sla_deadline,
         timeline=[TimelineEventOut.model_validate(t) for t in claim.timeline],

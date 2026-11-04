@@ -61,6 +61,8 @@ class Claim(BaseEntity):
     member_notification_sent: Mapped[bool] = mapped_column(default=False)
     member_notification_channel: Mapped[str | None] = mapped_column(String(16))
     member_response: Mapped[str] = mapped_column(String(16), default="PENDING")
+    # 1-5, asked after a member confirms they received the service.
+    member_rating: Mapped[int | None] = mapped_column(Integer)
 
     agent_notes: Mapped[str | None] = mapped_column(Text)
 

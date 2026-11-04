@@ -46,6 +46,7 @@ export const DECISION_LABEL: Record<ClaimDecision, string> = {
   REJECT_ERROR: 'Rejected — Error',
   MEMBER_DISPUTED: 'Member Disputed',
   ESCALATED: 'Escalated',
+  INFO_NEEDED: 'Info Needed',
 };
 
 export const DECISION_COLOR: Record<ClaimDecision, string> = {
@@ -56,6 +57,7 @@ export const DECISION_COLOR: Record<ClaimDecision, string> = {
   REJECT_ERROR: 'bg-orange-50 text-orange-700 border-orange-200',
   MEMBER_DISPUTED: 'bg-purple-50 text-purple-700 border-purple-200',
   ESCALATED: 'bg-gray-100 text-gray-700 border-gray-300',
+  INFO_NEEDED: 'bg-sky-50 text-sky-700 border-sky-200',
 };
 
 // ─── Trust Badge ──────────────────────────────────────────────────────────────

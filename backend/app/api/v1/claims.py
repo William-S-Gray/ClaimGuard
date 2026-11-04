@@ -5,7 +5,7 @@ import uuid
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.core.dependencies import (
     CurrentUserDep,
@@ -28,6 +28,10 @@ class RejectPayload(BaseModel):
 
 class NotePayload(BaseModel):
     note: str
+
+
+class InfoRequestPayload(BaseModel):
+    message: str = Field(..., min_length=5, max_length=1000)
 
 
 class MemberAlertPayload(BaseModel):
@@ -151,6 +155,29 @@ async def add_note(
         await ClaimService(db).add_note(claim_ref, payload.note, actor=user.id),
         "Note added",
     )
+
+
+@router.post(
+    "/{claim_ref}/request-info",
+    dependencies=[Depends(require_permission("claim:approve"))],
+    summary="Send the claim back to the provider for more information")
+async def request_info(
+    claim_ref: str,
+    payload: InfoRequestPayload,
+    db: DbSession,
+    user: CurrentUserDep,
+    request: Request,
+) -> dict:
+    data = await ClaimService(db).request_info(claim_ref, payload.message.strip(), actor=user.id)
+    await AuditService(db).record(
+        action="claim.request_info",
+        entity_type="claim",
+        entity_id=claim_ref,
+        actor_id=user.id,
+        request_id=getattr(request.state, "request_id", None),
+        ip_address=client_ip(request),
+    )
+    return success(data, "Information requested")
 
 
 @router.post(

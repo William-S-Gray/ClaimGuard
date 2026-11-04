@@ -39,7 +39,8 @@ export interface PortalDashboard {
     claimAccuracy: number;
     investigationSuccess: number | null;
     investigationsClosed: number;
-    memberSatisfaction: number | null;
+    memberSatisfaction: number | null; // average 1-5 rating
+    memberRatings: number;
     shortfallIndex: number;
     flags90d: number;
     totalClaims: number;
@@ -56,8 +57,9 @@ export interface PortalClaim {
   amount: number;
   service: string | null;
   member: string;
-  status: 'APPROVED' | 'UNDER_REVIEW' | 'DISPUTED' | 'REJECTED';
+  status: 'APPROVED' | 'UNDER_REVIEW' | 'DISPUTED' | 'REJECTED' | 'INFO_NEEDED';
   disputeReason: string | null;
+  infoRequest: string | null;
 }
 
 export interface PortalAppeal {
@@ -73,6 +75,8 @@ export interface PortalAppeal {
 export const fetchPortalDashboard = () => api.get<PortalDashboard>('/portal/provider/dashboard');
 export const fetchPortalClaims = (days = 30) =>
   api.get<PortalClaim[]>('/portal/provider/claims', { params: { days } });
+export const supplyPortalInfo = (claimRef: string, response: string) =>
+  api.post<PortalClaim>(`/portal/provider/claims/${encodeURIComponent(claimRef)}/info`, { response });
 export const fetchPortalAppeals = () => api.get<PortalAppeal[]>('/portal/provider/appeals');
 export const submitPortalAppeal = (reason: string) =>
   api.post<PortalAppeal>('/portal/provider/appeals', { reason });
@@ -392,6 +396,10 @@ export async function rejectClaim(
   reason: 'REJECT_FRAUD' | 'REJECT_ERROR',
 ): Promise<Claim> {
   return api.post<Claim>(`/claims/${encodeURIComponent(claimRef)}/reject`, { reason });
+}
+
+export async function requestClaimInfo(claimRef: string, message: string): Promise<Claim> {
+  return api.post<Claim>(`/claims/${encodeURIComponent(claimRef)}/request-info`, { message });
 }
 
 // ─── MemberGuard (instant alerts + confirmation) ─────────────────────────────────

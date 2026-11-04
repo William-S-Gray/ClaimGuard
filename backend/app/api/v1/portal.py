@@ -8,7 +8,8 @@ from pydantic import BaseModel, Field
 from app.core.dependencies import DbSession, ProviderUserDep, client_ip, get_provider_user
 from app.core.responses import success
 from app.services.audit import AuditService
-from app.services.provider_portal import ProviderPortalService
+from app.services.claims import ClaimService
+from app.services.provider_portal import ProviderPortalService, portal_claim
 
 router = APIRouter(
     prefix="/portal/provider",
@@ -19,6 +20,10 @@ router = APIRouter(
 
 class AppealPayload(BaseModel):
     reason: str = Field(..., min_length=10, max_length=2000)
+
+
+class InfoPayload(BaseModel):
+    response: str = Field(..., min_length=5, max_length=2000)
 
 
 @router.get("/dashboard", summary="Own TrustScore, breakdown, peers and trend")
@@ -33,6 +38,24 @@ async def claims(
     return success(
         await ProviderPortalService(db).recent_claims(user.provider_id, days), "Claims"
     )
+
+
+@router.post("/claims/{claim_ref}/info", summary="Answer an information request")
+async def supply_info(
+    claim_ref: str, payload: InfoPayload, db: DbSession, user: ProviderUserDep, request: Request
+) -> dict:
+    claim = await ClaimService(db).supply_info(
+        claim_ref, user.provider_id, payload.response.strip(), actor=user.id
+    )
+    await AuditService(db).record(
+        action="claim.supply_info",
+        entity_type="claim",
+        entity_id=claim_ref,
+        actor_id=user.id,
+        request_id=getattr(request.state, "request_id", None),
+        ip_address=client_ip(request),
+    )
+    return success(portal_claim(claim), "Information sent")
 
 
 @router.get("/report.csv", summary="Download own claims as CSV")

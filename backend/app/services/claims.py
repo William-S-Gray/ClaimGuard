@@ -34,6 +34,22 @@ log = get_logger(__name__)
 _MEMBER_CHANNELS = ("WHATSAPP", "SMS", "USSD")
 _MEMBER_RESPONSES = {"CONFIRMED", "DISPUTED"}
 
+# Decided claims can't be sent back to the provider for more information.
+_FINAL_DECISIONS = {"APPROVE", "REJECT_FRAUD", "REJECT_ERROR"}
+INFO_REQUESTED = "Information requested"
+
+
+def compose_rating_prompt(claim: Claim) -> str:
+    """Asked once a member confirms a claim. Short enough for one SMS or USSD screen."""
+    return (
+        f"Thank you. How would you rate your care at {claim.provider.name}? "
+        "Answer 1 (poor) to 5 (excellent)."
+    )
+
+
+def latest_info_request(claim: Claim) -> TimelineEvent | None:
+    return next((t for t in reversed(claim.timeline) if t.event == INFO_REQUESTED), None)
+
 
 SMS_LIMIT = 160  # one SMS segment; longer texts split and cost more
 
@@ -177,6 +193,73 @@ class ClaimService:
         await self.session.flush()
         return claim_to_detail(claim)
 
+    # ── Info needed: send a claim back to the provider ─────────────────────────
+    async def request_info(self, claim_ref: str, message: str, actor: str) -> dict:
+        claim = await self.repo.get_by_ref(claim_ref)
+        if not claim:
+            raise NotFoundError(f"Claim {claim_ref} not found")
+        if claim.decision in _FINAL_DECISIONS:
+            raise BusinessRuleError("Claim is already decided")
+        if claim.decision == "INFO_NEEDED":
+            raise BusinessRuleError("Already waiting on the provider")
+
+        previous = claim.decision
+        claim.decision = "INFO_NEEDED"
+        claim.updated_by = actor
+        await self._add_timeline(claim, INFO_REQUESTED, message, actor)
+        # Remember where the claim was so the provider's answer puts it back.
+        claim.timeline[-1].event_metadata = {"previousDecision": previous}
+        await self.session.flush()
+        publish(WSEventType.QUEUE_UPDATED, {"claimRef": claim_ref, "decision": "INFO_NEEDED"})
+        return claim_to_detail(claim)
+
+    async def supply_info(
+        self, claim_ref: str, provider_id: str, response: str, actor: str
+    ) -> Claim:
+        """The provider answers an info request; the claim goes back to review."""
+        claim = await self.repo.get_by_ref(claim_ref)
+        # Another provider's claim looks the same as a missing one.
+        if not claim or str(claim.provider_id) != provider_id:
+            raise NotFoundError(f"Claim {claim_ref} not found")
+        if claim.decision != "INFO_NEEDED":
+            raise BusinessRuleError("No information has been requested for this claim")
+
+        request = latest_info_request(claim)
+        claim.decision = (
+            (request.event_metadata or {}).get("previousDecision") if request else None
+        ) or "PEND_VERIFY"
+        claim.updated_by = actor
+        await self._add_timeline(
+            claim, "Provider supplied information", response, actor, type_="provider"
+        )
+        await NotificationService(self.session).create(
+            user_id=None,
+            title="Provider replied",
+            message=f"{claim.provider.name} answered the information request on {claim_ref}.",
+            type_="info",
+            link=f"/queue/{claim_ref}",
+        )
+        await self.session.flush()
+        publish(WSEventType.QUEUE_UPDATED, {"claimRef": claim_ref, "decision": claim.decision})
+        return claim
+
+    async def record_member_rating(self, claim_ref: str, rating: int) -> dict:
+        if not 1 <= rating <= 5:
+            raise BusinessRuleError("Rating must be 1 to 5")
+        claim = await self.repo.get_by_ref(claim_ref)
+        if not claim:
+            raise NotFoundError(f"Claim {claim_ref} not found")
+        if claim.member_response != "CONFIRMED":
+            raise BusinessRuleError("Only a confirmed claim can be rated")
+        claim.member_rating = rating
+        await self._add_timeline(
+            claim, "Member rated care", f"{rating}/5 for {claim.provider.name}",
+            "member", type_="member",
+        )
+        await self.session.flush()
+        publish(WSEventType.DASHBOARD_UPDATED, {"reason": "member_rating"})
+        return claim_to_detail(claim)
+
     # ── MemberGuard: instant alerts & member confirmation ───────────────────────
     async def send_member_alert(self, claim_ref: str, channel: str, actor: str) -> dict:
         """Send a member a verification alert for a claim and reset their response.
@@ -215,6 +298,7 @@ class ClaimService:
         claim.member_notification_sent = True
         claim.member_notification_channel = channel
         claim.member_response = "PENDING"
+        claim.member_rating = None  # a re-check asks for a fresh rating
         claim.updated_by = actor
 
         if delivered:

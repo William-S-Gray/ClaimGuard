@@ -19,8 +19,10 @@ from app.models.claim import Claim
 from app.models.investigation import Investigation
 from app.models.provider import Provider, ProviderAppeal, TrustScoreSnapshot
 from app.modules.trustscore.service import confidence
+from app.repositories.claim import ClaimRepository
 from app.repositories.provider import ProviderRepository
 from app.schemas.claim import mask_name
+from app.services.claims import latest_info_request
 from app.services.providers import ProviderService
 
 APPEAL_OUTCOMES = {"UPHELD", "REJECTED"}
@@ -31,11 +33,31 @@ _LEGITIMATE = {"FALSE_POSITIVE", "NO_ACTION"}
 def claim_status(claim: Claim) -> str:
     if claim.member_response == "DISPUTED":
         return "DISPUTED"
+    if claim.decision == "INFO_NEEDED":
+        return "INFO_NEEDED"
     if claim.decision == "APPROVE":
         return "APPROVED"
     if claim.decision.startswith("REJECT"):
         return "REJECTED"
     return "UNDER_REVIEW"
+
+
+def portal_claim(c: Claim) -> dict:
+    """A claim as its provider sees it: member initials, no scores or model output."""
+    status = claim_status(c)
+    dispute = next((f.detail for f in c.flags if f.code == "MEMBER_DISPUTED"), None)
+    request = latest_info_request(c) if status == "INFO_NEEDED" else None
+    return {
+        "claimRef": c.claim_ref,
+        "submittedAt": c.submitted_at,
+        "serviceDate": c.service_date,
+        "amount": float(c.claimed_amount),
+        "service": c.items[0].description if c.items else None,
+        "member": mask_name(c.member.name),
+        "status": status,
+        "disputeReason": dispute if status == "DISPUTED" else None,
+        "infoRequest": request.description if request else None,
+    }
 
 
 def appeal_out(a: ProviderAppeal) -> dict:
@@ -104,6 +126,7 @@ class ProviderPortalService:
             )
         ).scalars().all()
         legit = sum(r in _LEGITIMATE for r in resolutions)
+        rating_avg, ratings = await ClaimRepository(self.session).rating_stats(provider.id)
 
         others = [
             p for p in await ProviderRepository(self.session).all_ranked()
@@ -129,7 +152,8 @@ class ProviderPortalService:
                     round(100 * legit / len(resolutions), 1) if resolutions else None
                 ),
                 "investigationsClosed": len(resolutions),
-                "memberSatisfaction": None,  # not collected yet
+                "memberSatisfaction": rating_avg,  # 1-5, None until rated
+                "memberRatings": ratings,
                 "shortfallIndex": float(provider.shortfall_index),
                 "flags90d": provider.flags_90d,
                 "totalClaims": provider.total_claims,
@@ -151,30 +175,14 @@ class ProviderPortalService:
 
     async def recent_claims(self, provider_id: str, days: int = 30) -> list[dict]:
         provider = await self._provider(provider_id)
-        out = []
-        for c in await self._claims_since(provider.id, days):
-            status = claim_status(c)
-            dispute = next((f.detail for f in c.flags if f.code == "MEMBER_DISPUTED"), None)
-            out.append(
-                {
-                    "claimRef": c.claim_ref,
-                    "submittedAt": c.submitted_at,
-                    "serviceDate": c.service_date,
-                    "amount": float(c.claimed_amount),
-                    "service": c.items[0].description if c.items else None,
-                    "member": mask_name(c.member.name),
-                    "status": status,
-                    "disputeReason": dispute if status == "DISPUTED" else None,
-                }
-            )
-        return out
+        return [portal_claim(c) for c in await self._claims_since(provider.id, days)]
 
     async def report_csv(self, provider_id: str, days: int) -> str:
         rows = await self.recent_claims(provider_id, days)
         buf = io.StringIO()
         fields = [
             "claimRef", "submittedAt", "serviceDate", "amount",
-            "service", "member", "status", "disputeReason",
+            "service", "member", "status", "disputeReason", "infoRequest",
         ]
         writer = csv.DictWriter(buf, fieldnames=fields)
         writer.writeheader()
