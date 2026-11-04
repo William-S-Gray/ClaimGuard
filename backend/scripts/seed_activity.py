@@ -20,12 +20,17 @@ from datetime import UTC, datetime
 
 from app.core.database import SessionFactory, engine
 from app.services.demo_activity import HISTORY_CLAIMS, DemoModeOff, seed_history
+from app.services.providers import ProviderService
 
 
 async def main() -> None:
     try:
         async with SessionFactory() as session:
             created = await seed_history(session, datetime.now(UTC))
+            # Score providers from the claims just written (and start their history).
+            providers = ProviderService(session)
+            for p in await providers.repo.all_ranked():
+                await providers.recalculate(p.code, reason="seed")
             await session.commit()
     except DemoModeOff as exc:
         sys.exit(f"seed_activity: {exc}")

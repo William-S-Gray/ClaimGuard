@@ -18,6 +18,7 @@ from app.repositories.member import MemberRepository
 from app.repositories.provider import ProviderRepository
 from app.schemas.claim import ClaimIngest, claim_to_detail, claim_to_summary
 from app.services.notifications import CHANNELS, NotificationService
+from app.services.providers import ProviderService
 
 # Hours until an un-actioned claim auto-approves / breaches SLA.
 _AUTO_APPROVE_HOURS = 72
@@ -226,6 +227,9 @@ class ClaimService:
             type_="member",
         )
         await self.session.flush()
+        await ProviderService(self.session).recalculate(
+            claim.provider.code, reason=f"member {verb} {claim_ref}"
+        )
         publish(
             WSEventType.QUEUE_UPDATED,
             {"claimRef": claim_ref, "memberResponse": response},
@@ -340,6 +344,9 @@ class ClaimService:
         publish(WSEventType.NH263_WEBHOOK, {"claimRef": claim.claim_ref, "source": "NH263"})
         publish(WSEventType.CLAIM_SCORED, scored_payload)
         await NotificationService(self.session).create_from_event("claim_scored", scored_payload)
+        await ProviderService(self.session).recalculate(
+            provider.code, reason=f"claim {claim.claim_ref} scored"
+        )
 
         fresh = await self.repo.get_by_ref(claim.claim_ref)
         return claim_to_detail(fresh or claim)
