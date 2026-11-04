@@ -29,6 +29,7 @@ class USSDStats(CamelModel):
     confirmed: int
     disputed: int
     awaiting_reply: int
+    code: str  # the USSD code members dial (settings.ussd_code)
 
 
 class FraudTrendPoint(CamelModel):

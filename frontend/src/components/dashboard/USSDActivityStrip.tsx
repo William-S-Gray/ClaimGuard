@@ -11,7 +11,7 @@ export function USSDActivityStrip() {
     <div className="flex items-center gap-3 bg-sidebar-bg text-slate-300 text-xs rounded-xl px-5 py-3 flex-wrap">
       <div className="flex items-center gap-2 text-white font-semibold">
         <Hash size={14} className="text-blue-400" />
-        <span>USSD *483*360#</span>
+        <span>USSD {data.code}</span>
       </div>
       <span className="text-slate-600">|</span>
       <span className="text-slate-400">Econet</span>

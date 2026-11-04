@@ -107,6 +107,9 @@ class Settings(BaseSettings):
     # SMS / USSD gateway (vendor-neutral). Inbound webhooks must send this value
     # in the X-Gateway-Token header; empty disables them.
     gateway_webhook_secret: str = ""
+    # The USSD code members dial to answer an alert. The networks assign the real
+    # one; until then this demo value is shown everywhere (API and UI read it here).
+    ussd_code: str = "*483*360#"
 
     @property
     def email_configured(self) -> bool:

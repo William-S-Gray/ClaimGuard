@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.exceptions import BusinessRuleError, NotFoundError
 from app.core.logging import get_logger
 from app.core.websocket import WSEventType, publish
@@ -35,7 +36,6 @@ _MEMBER_RESPONSES = {"CONFIRMED", "DISPUTED"}
 
 
 SMS_LIMIT = 160  # one SMS segment; longer texts split and cost more
-USSD_CODE = "*277#"
 
 
 def compose_sms_alert(claim: Claim) -> str:
@@ -51,7 +51,7 @@ def compose_sms_alert(claim: Claim) -> str:
 
 
 def compose_ussd_menu(claim: Claim) -> str:
-    """The menu a member sees after dialling USSD_CODE."""
+    """The menu a member sees after dialling settings.ussd_code."""
     amount = f"US${float(claim.claimed_amount):,.2f}"
     return f"ClaimGuard Alert\nClaim: {amount} at {claim.provider.name}\nCorrect?\n1=Yes 2=No"
 
@@ -233,7 +233,7 @@ class ClaimService:
                 claim,
                 "Member alert not delivered",
                 f"No channel could reach {claim.member.name}; the member can still "
-                f"answer by dialling {USSD_CODE}. Follow up manually.",
+                f"answer by dialling {settings.ussd_code}. Follow up manually.",
                 actor,
                 type_="system",
             )
@@ -254,6 +254,7 @@ class ClaimService:
                 "memberName": claim.member.name,
                 "message": message,
                 "delivered": delivered,
+                "ussdCode": settings.ussd_code,
             },
         }
 

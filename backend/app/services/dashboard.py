@@ -7,6 +7,7 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.models.claim import Claim
 from app.models.investigation import Investigation
 from app.repositories.claim import ClaimRepository
@@ -141,4 +142,5 @@ class DashboardService:
             confirmed=confirmed,
             disputed=disputed,
             awaiting_reply=sent - confirmed - disputed,
+            code=settings.ussd_code,
         ).model_dump(by_alias=True)
