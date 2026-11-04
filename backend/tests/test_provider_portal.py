@@ -1,6 +1,8 @@
 """Provider portal: isolation from staff data, own-provider scoping, appeals."""
 from __future__ import annotations
 
+import re
+
 import pytest
 import pytest_asyncio
 from httpx import AsyncClient
@@ -74,7 +76,6 @@ async def test_claims_are_own_and_masked(
 ):
     staff_view = await client.get(f"/api/v1/providers/{OWN_CODE}/claims", headers=auth_headers)
     own_refs = {c["claimRef"] for c in staff_view.json()["data"]}
-    full_names = {c["member"]["name"] for c in staff_view.json()["data"]}
 
     resp = await client.get(
         "/api/v1/portal/provider/claims?days=365", headers=portal_headers
@@ -84,7 +85,7 @@ async def test_claims_are_own_and_masked(
     assert rows, "seeded claims for this provider should be visible"
     for row in rows:
         assert row["claimRef"] in own_refs
-        assert row["member"] not in full_names  # initials only
+        assert re.fullmatch(r"(\w\. ?)+", row["member"]), row["member"]  # initials only
         assert "riskScore" not in row and "aiExplanation" not in row
         assert row["status"] in {"APPROVED", "UNDER_REVIEW", "DISPUTED", "REJECTED"}
 

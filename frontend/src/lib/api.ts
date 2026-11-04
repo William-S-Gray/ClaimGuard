@@ -3,6 +3,7 @@
 import { api, downloadFile } from './apiClient';
 import type {
   Claim,
+  ClaimSummary,
   Provider,
   Member,
   QueueFilters,
@@ -343,13 +344,13 @@ export async function fetchUSSDStats(): Promise<USSDStats> {
 
 // ─── Claims ─────────────────────────────────────────────────────────────────────
 
-export async function fetchLiveFeed(): Promise<Claim[]> {
-  return api.get<Claim[]>('/claims/live-feed', { params: { limit: 8 } });
+export async function fetchLiveFeed(): Promise<ClaimSummary[]> {
+  return api.get<ClaimSummary[]>('/claims/live-feed', { params: { limit: 8 } });
 }
 
-export async function fetchQueue(filters?: Partial<QueueFilters>): Promise<Claim[]> {
+export async function fetchQueue(filters?: Partial<QueueFilters>): Promise<ClaimSummary[]> {
   // Server-side filtering; a generous page size lets the client paginate the result set.
-  return api.get<Claim[]>('/claims', {
+  return api.get<ClaimSummary[]>('/claims', {
     params: {
       page: 1,
       page_size: 200,
@@ -420,8 +421,8 @@ export async function fetchProviderByCode(code: string): Promise<Provider | null
   return api.get<Provider | null>(`/providers/${encodeURIComponent(code)}`, { nullOn404: true });
 }
 
-export async function fetchProviderClaims(providerCode: string): Promise<Claim[]> {
-  return api.get<Claim[]>(`/providers/${encodeURIComponent(providerCode)}/claims`);
+export async function fetchProviderClaims(providerCode: string): Promise<ClaimSummary[]> {
+  return api.get<ClaimSummary[]>(`/providers/${encodeURIComponent(providerCode)}/claims`);
 }
 
 // ─── Members ──────────────────────────────────────────────────────────────────

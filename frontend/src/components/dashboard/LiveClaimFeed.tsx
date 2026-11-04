@@ -9,7 +9,7 @@ import { LatencyBadge } from '@/components/shared/LatencyBadge';
 import { SkeletonTableBody } from '@/components/shared/SkeletonLoader';
 import { LiveDot } from '@/components/shared/LiveDot';
 import { formatCurrency, formatTimeAgo } from '@/lib/formatters';
-import type { Claim } from '@/types';
+import type { ClaimSummary } from '@/types';
 import { Link } from '@tanstack/react-router';
 import { ExternalLink } from 'lucide-react';
 
@@ -19,7 +19,7 @@ export function LiveClaimFeed() {
     queryFn: fetchLiveFeed,
   });
 
-  const [claims, setClaims] = useState<Claim[]>([]);
+  const [claims, setClaims] = useState<ClaimSummary[]>([]);
   const [newClaimRef, setNewClaimRef] = useState<string | null>(null);
 
   useEffect(() => {

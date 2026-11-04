@@ -111,6 +111,14 @@ export interface Claim {
   timeline: TimelineEvent[];
 }
 
+/** Member as list views get it: masked name ("T. M."), no contact or health details. */
+export type MemberRef = Pick<Member, 'id' | 'name' | 'memberNumber' | 'plan'>;
+
+/** A claim row from a list endpoint (queue, live feed, provider claims). */
+export interface ClaimSummary extends Omit<Claim, 'member'> {
+  member: MemberRef;
+}
+
 // ─── SHAP ─────────────────────────────────────────────────────────────────────
 
 export interface ShapContribution {
