@@ -160,10 +160,16 @@ export interface SavingsDataPoint {
 
 // ─── Queue ────────────────────────────────────────────────────────────────────
 
+export type QueueSort = 'risk' | 'amount' | 'newest';
+
 export interface QueueFilters {
   search: string;
   priority: Priority | 'ALL';
   status: ClaimStatus | 'ALL';
+  riskLevel: RiskLevel | 'ALL';
+  sort: QueueSort;
+  /** Only claims with an investigation assigned to the signed-in user. */
+  mine: boolean;
   dateFrom?: string;
   dateTo?: string;
 }

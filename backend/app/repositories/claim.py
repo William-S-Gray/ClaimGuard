@@ -53,7 +53,10 @@ class ClaimRepository(BaseRepository[Claim]):
             )
         if priority and priority != "ALL":
             stmt = stmt.where(Claim.priority == priority)
-        if status and status != "ALL":
+        if status == "MEMBER_DISPUTED":
+            # A dispute is the member's reply, never a decision value.
+            stmt = stmt.where(Claim.member_response == "DISPUTED")
+        elif status and status != "ALL":
             stmt = stmt.where(Claim.decision == status)
         if risk_level and risk_level != "ALL":
             stmt = stmt.where(Claim.risk_level == risk_level)

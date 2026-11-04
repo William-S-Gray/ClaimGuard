@@ -72,6 +72,11 @@ class ClaimSummary(CamelModel):
     flags: list[str] = []
     latency_ms: int
     ai_explanation: str | None = None
+    # Member verification state (no personal data): drives MemberGuard counts
+    # and the queue's "Disputed" filter.
+    member_notification_sent: bool = False
+    member_notification_channel: str | None = None
+    member_response: str = "PENDING"
 
 
 class ClaimOut(ClaimSummary):
@@ -85,9 +90,6 @@ class ClaimOut(ClaimSummary):
     items: list[ClaimItemOut] = []
     shap_contributions: list[ShapContributionOut] = []
     auto_approve_at: datetime | None = None
-    member_notification_sent: bool = False
-    member_notification_channel: str | None = None
-    member_response: str = "PENDING"
     agent_notes: str | None = None
     sla_deadline: datetime | None = None
     timeline: list[TimelineEventOut] = []
@@ -148,6 +150,9 @@ def claim_to_summary(claim: Claim) -> dict:
         flags=[f.code for f in claim.flags],
         latency_ms=claim.latency_ms,
         ai_explanation=claim.ai_explanation,
+        member_notification_sent=claim.member_notification_sent,
+        member_notification_channel=claim.member_notification_channel,
+        member_response=claim.member_response,
     ).model_dump(by_alias=True)
 
 
