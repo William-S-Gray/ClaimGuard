@@ -28,7 +28,7 @@ export default defineConfig({
   plugins: [react(), dropConsolePlugin()],
   resolve: {
     alias: {
-      '@': resolve(__dirname, './src'),
+      '@': resolve(import.meta.dirname, './src'),
     },
   },
   build: {
