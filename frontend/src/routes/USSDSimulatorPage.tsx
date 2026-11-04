@@ -4,7 +4,7 @@ import { fetchUSSDStats } from '@/lib/api';
 import { AppShell } from '@/components/layout/AppShell';
 import { StatCard } from '@/components/shared/StatCard';
 import { cn } from '@/lib/utils';
-import { Hash, CheckCircle, XCircle, HelpCircle, Phone, MessageSquare, CreditCard, AlertCircle } from 'lucide-react';
+import { Hash, CheckCircle, XCircle, HelpCircle, Phone, MessageSquare, AlertCircle } from 'lucide-react';
 
 type ScreenKey =
   | 'home'
@@ -207,10 +207,10 @@ export function USSDSimulatorPage() {
 
         {/* Carrier + stats */}
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <StatCard title="Total Sessions" value={stats?.totalSessions ?? 47} subtitle="Today" icon={<Phone size={18} />} accentColor="#1A4D8F" />
-          <StatCard title="Confirmations" value={stats?.confirmations ?? 12} subtitle="Members confirmed" icon={<CheckCircle size={18} />} accentColor="#16A34A" />
-          <StatCard title="Disputes Filed" value={stats?.disputes ?? 3} subtitle="Fraud flags raised" icon={<XCircle size={18} />} accentColor="#DC2626" />
-          <StatCard title="Completed" value={stats?.completed ?? 32} subtitle="Full sessions" icon={<MessageSquare size={18} />} accentColor="#7B2D8B" />
+          <StatCard title="Alerts Sent" value={stats?.alertsSent ?? '—'} subtitle="Over USSD" icon={<Phone size={18} />} accentColor="#1A4D8F" />
+          <StatCard title="Confirmations" value={stats?.confirmed ?? '—'} subtitle="Members confirmed" icon={<CheckCircle size={18} />} accentColor="#16A34A" />
+          <StatCard title="Disputes Filed" value={stats?.disputed ?? '—'} subtitle="Fraud flags raised" icon={<XCircle size={18} />} accentColor="#DC2626" />
+          <StatCard title="Awaiting Reply" value={stats?.awaitingReply ?? '—'} subtitle="No answer yet" icon={<MessageSquare size={18} />} accentColor="#7B2D8B" />
         </div>
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
@@ -298,43 +298,14 @@ export function USSDSimulatorPage() {
 
           {/* Stats panel */}
           <div className="xl:col-span-2 space-y-4">
-            {/* Carrier breakdown */}
-            <div className="page-card p-5">
-              <h3 className="mb-4">Carrier Breakdown</h3>
-              <div className="space-y-3">
-                {[
-                  { name: 'Econet', sessions: stats?.carriers.econet ?? 23, color: '#1A4D8F', pct: ((stats?.carriers.econet ?? 23) / (stats?.totalSessions ?? 47)) * 100 },
-                  { name: 'NetOne', sessions: stats?.carriers.netone ?? 15, color: '#16A34A', pct: ((stats?.carriers.netone ?? 15) / (stats?.totalSessions ?? 47)) * 100 },
-                  { name: 'Telecel', sessions: stats?.carriers.telecel ?? 9, color: '#7B2D8B', pct: ((stats?.carriers.telecel ?? 9) / (stats?.totalSessions ?? 47)) * 100 },
-                ].map((carrier) => (
-                  <div key={carrier.name}>
-                    <div className="flex justify-between text-xs mb-1">
-                      <span className="font-semibold text-gray-700">{carrier.name}</span>
-                      <span className="text-gray-500">{carrier.sessions} sessions ({carrier.pct.toFixed(0)}%)</span>
-                    </div>
-                    <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
-                      <div
-                        className="h-full rounded-full"
-                        style={{ width: `${carrier.pct}%`, backgroundColor: carrier.color }}
-                        role="progressbar"
-                        aria-valuenow={Math.round(carrier.pct)}
-                        aria-valuemax={100}
-                      />
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-
             {/* Session outcomes */}
             <div className="page-card p-5">
-              <h3 className="mb-4">Session Outcomes Today</h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <h3 className="mb-4">Member Replies</h3>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 {[
-                  { label: 'Claims confirmed', value: stats?.confirmations ?? 12, icon: <CheckCircle size={20} className="text-green-500" />, bg: 'bg-green-50' },
-                  { label: 'Disputes raised', value: stats?.disputes ?? 3, icon: <AlertCircle size={20} className="text-red-500" />, bg: 'bg-red-50' },
-                  { label: 'Balance checks', value: 8, icon: <CreditCard size={20} className="text-blue-500" />, bg: 'bg-blue-50' },
-                  { label: 'Help requests', value: 6, icon: <HelpCircle size={20} className="text-purple-500" />, bg: 'bg-purple-50' },
+                  { label: 'Claims confirmed', value: stats?.confirmed ?? '—', icon: <CheckCircle size={20} className="text-green-500" />, bg: 'bg-green-50' },
+                  { label: 'Disputes raised', value: stats?.disputed ?? '—', icon: <AlertCircle size={20} className="text-red-500" />, bg: 'bg-red-50' },
+                  { label: 'Awaiting reply', value: stats?.awaitingReply ?? '—', icon: <HelpCircle size={20} className="text-purple-500" />, bg: 'bg-purple-50' },
                 ].map((item) => (
                   <div key={item.label} className={cn('rounded-xl p-4 text-center', item.bg)}>
                     <div className="flex justify-center mb-2">{item.icon}</div>

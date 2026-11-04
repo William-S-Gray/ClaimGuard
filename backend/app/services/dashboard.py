@@ -1,6 +1,9 @@
 """Dashboard & analytics service — live KPIs computed from claim data."""
 from __future__ import annotations
 
+import calendar
+from datetime import UTC, datetime, timedelta
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.repositories.claim import ClaimRepository
@@ -14,10 +17,14 @@ class DashboardService:
 
     async def metrics(self) -> dict:
         today = self.claims.start_of_today()
+        yesterday = today - timedelta(days=1)
         claims_today = await self.claims.count_since(today)
+        claims_yesterday = await self.claims.count_since(yesterday) - claims_today
         flagged_today = await self.claims.count_flagged_since(today)
         pending = await self.claims.count_by_decision("PEND_INVESTIGATE")
-        auto_approved = await self.claims.count_by_decision("APPROVE")
+        # Scoped to today like the card it sits under. It used to count every
+        # approval ever, so "0 claims today" sat over "2 auto-approved".
+        auto_approved = await self.claims.count_by_decision_since("APPROVE", today)
         disputed = await self.claims.count_by_decision("MEMBER_DISPUTED")
         avg_latency = await self.claims.avg_latency()
         saved = await self.claims.sum_estimated_saved()
@@ -27,6 +34,7 @@ class DashboardService:
 
         return DashboardMetrics(
             claims_today=claims_today,
+            claims_yesterday=claims_yesterday,
             flagged_today=flagged_today,
             estimated_saved=round(saved, 2),
             member_alerts=disputed,
@@ -37,36 +45,51 @@ class DashboardService:
         ).model_dump(by_alias=True)
 
     async def savings_series(self) -> list[dict]:
-        """Demo-friendly cumulative savings trend (12 months)."""
-        months = [
-            "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-            "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-        ]
-        base = await self.claims.sum_estimated_saved() or 48_000
-        monthly = max(base / 12, 4_000)
+        """Loss avoided per calendar month over the last 12 months, oldest first.
+
+        Built from the claims themselves, so the running total ends at the
+        same figure the Estimated Saved card shows for that window. It used to
+        be a synthetic curve with a $4,000/month floor, which put $26k on the
+        chart beside $268 on the card.
+        """
+        now = datetime.now(UTC)
+        months: list[tuple[int, int]] = []
+        year, month = now.year, now.month
+        for _ in range(12):
+            months.append((year, month))
+            year, month = (year, month - 1) if month > 1 else (year - 1, 12)
+        months.reverse()
+
+        first_year, first_month = months[0]
+        since = datetime(first_year, first_month, 1, tzinfo=UTC)
+        by_month: dict[tuple[int, int], float] = {m: 0.0 for m in months}
+        for submitted_at, amount in await self.claims.saved_amounts_since(since):
+            at = submitted_at if submitted_at.tzinfo else submitted_at.replace(tzinfo=UTC)
+            key = (at.year, at.month)
+            if key in by_month:
+                by_month[key] += amount
+
         cumulative = 0.0
         out: list[dict] = []
-        for i, month in enumerate(months):
-            savings = monthly * (0.85 + i * 0.03)
-            cumulative += savings
+        for y, m in months:
+            cumulative += by_month[(y, m)]
             out.append(
                 SavingsDataPoint(
-                    month=month,
-                    savings=round(savings, 2),
+                    month=calendar.month_abbr[m],
+                    savings=round(by_month[(y, m)], 2),
                     cumulative=round(cumulative, 2),
-                    target=round(monthly * (i + 1), 2),
                 ).model_dump(by_alias=True)
             )
         return out
 
     async def ussd_stats(self) -> dict:
-        disputes = await self.claims.count_by_decision("MEMBER_DISPUTED")
-        confirmations = await self.claims.count_by_decision("PEND_VERIFY")
-        total_sessions = max(confirmations + disputes, 0) + 1240
+        """Counts of real USSD verification alerts; previously padded with constants."""
+        sent = await self.claims.count_member_alerts(channel="USSD")
+        confirmed = await self.claims.count_member_alerts(channel="USSD", response="CONFIRMED")
+        disputed = await self.claims.count_member_alerts(channel="USSD", response="DISPUTED")
         return USSDStats(
-            total_sessions=total_sessions,
-            confirmations=confirmations + 980,
-            disputes=disputes + 64,
-            completed=total_sessions - 32,
-            carriers={"econet": 712, "netone": 388, "telecel": 140},
+            alerts_sent=sent,
+            confirmed=confirmed,
+            disputed=disputed,
+            awaiting_reply=sent - confirmed - disputed,
         ).model_dump(by_alias=True)

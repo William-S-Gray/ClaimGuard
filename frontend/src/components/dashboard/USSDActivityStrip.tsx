@@ -18,10 +18,10 @@ export function USSDActivityStrip() {
       <span className="text-slate-400">NetOne</span>
       <span className="text-slate-400">Telecel</span>
       <span className="text-slate-600">|</span>
-      <span><span className="text-white font-semibold">{data.totalSessions}</span> sessions today</span>
-      <span className="text-green-400">✓ {data.confirmations} confirmed</span>
-      <span className="text-red-400">✗ {data.disputes} disputed</span>
-      <span className="text-slate-400">{data.completed} completed</span>
+      <span><span className="text-white font-semibold">{data.alertsSent}</span> verification alerts</span>
+      <span className="text-green-400">✓ {data.confirmed} confirmed</span>
+      <span className="text-red-400">✗ {data.disputed} disputed</span>
+      <span className="text-slate-400">{data.awaitingReply} awaiting reply</span>
     </div>
   );
 }
