@@ -359,7 +359,11 @@ export async function fetchLiveFeed(): Promise<ClaimSummary[]> {
   return api.get<ClaimSummary[]>('/claims/live-feed', { params: { limit: 8 } });
 }
 
-export async function fetchQueue(filters?: Partial<QueueFilters>): Promise<ClaimSummary[]> {
+export async function fetchQueue(
+  filters?: Partial<QueueFilters>,
+  /** User id for the "assigned to me" filter (applied when filters.mine). */
+  userId?: string,
+): Promise<ClaimSummary[]> {
   // Server-side filtering; a generous page size lets the client paginate the result set.
   return api.get<ClaimSummary[]>('/claims', {
     params: {
@@ -368,6 +372,9 @@ export async function fetchQueue(filters?: Partial<QueueFilters>): Promise<Claim
       search: filters?.search || undefined,
       priority: filters?.priority && filters.priority !== 'ALL' ? filters.priority : undefined,
       status: filters?.status && filters.status !== 'ALL' ? filters.status : undefined,
+      riskLevel: filters?.riskLevel && filters.riskLevel !== 'ALL' ? filters.riskLevel : undefined,
+      sort: filters?.sort,
+      investigator: filters?.mine && userId ? userId : undefined,
     },
   });
 }

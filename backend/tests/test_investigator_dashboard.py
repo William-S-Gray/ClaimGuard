@@ -94,6 +94,7 @@ async def test_queue_rows_mask_member_details(client: AsyncClient, auth_headers:
     for row in rows:
         for field in ("phone", "email", "dateOfBirth", "conditions"):
             assert field not in row["member"]
+        assert row["memberResponse"] in {"PENDING", "CONFIRMED", "DISPUTED"}
 
     # The audited detail view still has the full record.
     detail = (await client.get("/api/v1/claims/CG-00291", headers=auth_headers)).json()["data"]
@@ -108,3 +109,19 @@ async def test_queue_search_still_matches_full_member_name(
 ):
     refs = {c["claimRef"] for c in await _queue(client, auth_headers, search="tendai")}
     assert "CG-00291" in refs
+
+
+async def test_queue_disputed_filter_matches_member_disputes(
+    client: AsyncClient, auth_headers: dict
+):
+    await client.post(
+        "/api/v1/claims/CG-00112/member-alert", headers=auth_headers, json={"channel": "SMS"}
+    )
+    await client.post(
+        "/api/v1/claims/CG-00112/member-response",
+        headers=auth_headers,
+        json={"response": "DISPUTED"},
+    )
+    rows = await _queue(client, auth_headers, status="MEMBER_DISPUTED")
+    assert "CG-00112" in {r["claimRef"] for r in rows}
+    assert all(r["memberResponse"] == "DISPUTED" for r in rows)

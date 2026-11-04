@@ -12,9 +12,10 @@ import { EmptyState, ErrorState } from '@/components/shared/EmptyState';
 import { Pagination, usePagination } from '@/components/shared/Pagination';
 import { PageHeader } from '@/components/shared/LiveDot';
 import { formatCurrency, formatDate } from '@/lib/formatters';
-import { Search, RefreshCcw, Filter } from 'lucide-react';
+import { Search, RefreshCcw, Filter, ArrowDownWideNarrow } from 'lucide-react';
 import { useUIStore } from '@/stores/uiStore';
-import type { Priority, ClaimDecision } from '@/types';
+import { useAuthStore } from '@/stores/authStore';
+import type { Priority, ClaimDecision, QueueSort, RiskLevel } from '@/types';
 
 const PRIORITIES: Array<{ label: string; value: Priority | 'ALL' }> = [
   { label: 'All', value: 'ALL' },
@@ -32,14 +33,37 @@ const STATUSES: Array<{ label: string; value: ClaimDecision | 'ALL' }> = [
   { label: 'Approved', value: 'APPROVE' },
 ];
 
+const RISK_LEVELS: Array<{ label: string; value: RiskLevel | 'ALL' }> = [
+  { label: 'All', value: 'ALL' },
+  { label: 'Critical', value: 'CRITICAL' },
+  { label: 'High', value: 'HIGH' },
+  { label: 'Medium', value: 'MEDIUM' },
+  { label: 'Low', value: 'LOW' },
+];
+
+const SORTS: Array<{ label: string; value: QueueSort }> = [
+  { label: 'Highest risk first', value: 'risk' },
+  { label: 'Largest amount first', value: 'amount' },
+  { label: 'Newest first', value: 'newest' },
+];
+
 export function QueuePage() {
-  const { queueFilters, setQueueFilters } = useUIStore();
+  const { queueFilters, setQueueFilters, resetQueueFilters } = useUIStore();
+  const userId = useAuthStore((s) => s.user?.id);
   const [refreshKey, setRefreshKey] = useState(0);
 
   const { data: claims = [], isLoading, isError, refetch } = useQuery({
-    queryKey: ['queue', queueFilters, refreshKey],
-    queryFn: () => fetchQueue(queueFilters),
+    queryKey: ['queue', queueFilters, userId, refreshKey],
+    queryFn: () => fetchQueue(queueFilters, userId),
   });
+
+  const filtered =
+    queueFilters.search !== '' ||
+    queueFilters.priority !== 'ALL' ||
+    queueFilters.status !== 'ALL' ||
+    queueFilters.riskLevel !== 'ALL' ||
+    queueFilters.sort !== 'risk' ||
+    queueFilters.mine;
 
   const {
     page,
@@ -81,8 +105,9 @@ export function QueuePage() {
             />
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" role="group" aria-label="Priority">
             <Filter size={13} className="text-gray-400" aria-hidden="true" />
+            <span className="text-[11px] font-medium text-gray-400 uppercase">Priority</span>
             {PRIORITIES.map((p) => (
               <button
                 key={p.value}
@@ -99,7 +124,8 @@ export function QueuePage() {
             ))}
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2" role="group" aria-label="Status">
+            <span className="text-[11px] font-medium text-gray-400 uppercase">Status</span>
             {STATUSES.map((s) => (
               <button
                 key={s.value}
@@ -117,6 +143,61 @@ export function QueuePage() {
           </div>
 
           <span className="text-xs text-gray-400 ml-auto">{claims.length} result{claims.length !== 1 ? 's' : ''}</span>
+
+          {/* Risk level, sort and "assigned to me" */}
+          <div className="w-full flex flex-wrap items-center gap-3 border-t border-gray-100 pt-3">
+            <div className="flex items-center gap-2" role="group" aria-label="Risk level">
+              <span className="text-[11px] font-medium text-gray-400 uppercase">Risk</span>
+              {RISK_LEVELS.map((r) => (
+                <button
+                  key={r.value}
+                  onClick={() => setQueueFilters({ riskLevel: r.value })}
+                  className={`px-2.5 py-1 text-xs rounded-full font-medium transition-colors ${
+                    queueFilters.riskLevel === r.value
+                      ? 'bg-brand-navy text-white'
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                  aria-pressed={queueFilters.riskLevel === r.value}
+                >
+                  {r.label}
+                </button>
+              ))}
+            </div>
+
+            <label className="flex items-center gap-1.5 text-xs text-gray-600">
+              <ArrowDownWideNarrow size={13} className="text-gray-400" aria-hidden="true" />
+              <span className="sr-only">Sort by</span>
+              <select
+                className="form-select text-xs py-1"
+                value={queueFilters.sort}
+                onChange={(e) => setQueueFilters({ sort: e.target.value as QueueSort })}
+              >
+                {SORTS.map((s) => (
+                  <option key={s.value} value={s.value}>{s.label}</option>
+                ))}
+              </select>
+            </label>
+
+            <label className="flex items-center gap-1.5 text-xs text-gray-600 cursor-pointer">
+              <input
+                type="checkbox"
+                className="rounded border-gray-300"
+                checked={queueFilters.mine}
+                onChange={(e) => setQueueFilters({ mine: e.target.checked })}
+              />
+              Assigned to me
+            </label>
+
+            {filtered && (
+              <button
+                type="button"
+                onClick={resetQueueFilters}
+                className="text-xs text-brand-navy hover:underline ml-auto"
+              >
+                Reset filters
+              </button>
+            )}
+          </div>
         </div>
 
         {/* Table */}
