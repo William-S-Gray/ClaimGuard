@@ -20,6 +20,7 @@ import { ROICalculatorPage } from '@/routes/ROICalculatorPage';
 import { USSDSimulatorPage } from '@/routes/USSDSimulatorPage';
 import { UserManagementPage } from '@/routes/UserManagementPage';
 import { AuditTrailPage } from '@/routes/AuditTrailPage';
+import { AppealsReviewPage } from '@/routes/AppealsReviewPage';
 
 // ─── Root Route ───────────────────────────────────────────────────────────────
 
@@ -84,6 +85,12 @@ const providerDetailRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/trustscore/$providerCode',
   component: ProviderDetailPage,
+});
+
+const appealsRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/appeals',
+  component: AppealsReviewPage,
 });
 
 // ─── Members ──────────────────────────────────────────────────────────────────
@@ -151,6 +158,7 @@ const routeTree = rootRoute.addChildren([
   investigationDetailRoute,
   trustScoreRoute,
   providerDetailRoute,
+  appealsRoute,
   membersRoute,
   memberGuardRoute,
   demoRoute,

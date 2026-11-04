@@ -2,7 +2,7 @@ import { Link, useLocation } from '@tanstack/react-router';
 import {
   LayoutDashboard, ListFilter, ShieldCheck, Users, Hash,
   PlayCircle, Calculator, ChevronLeft, ChevronRight, Activity, FolderSearch, UserCog,
-  BellRing, ScrollText,
+  BellRing, ScrollText, Scale,
   type LucideIcon,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -30,6 +30,7 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/queue', label: 'Investigation Queue', icon: ListFilter },
   { to: '/investigations', label: 'Investigations', icon: FolderSearch },
   { to: '/trustscore', label: 'Provider TrustScore', icon: ShieldCheck },
+  { to: '/appeals', label: 'TrustScore Appeals', icon: Scale },
   { to: '/members', label: 'Member Portal', icon: Users },
   { to: '/memberguard', label: 'MemberGuard Alerts', icon: BellRing },
   { to: '/ussd', label: 'USSD Service', icon: Hash },

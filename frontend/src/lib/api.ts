@@ -79,6 +79,17 @@ export const submitPortalAppeal = (reason: string) =>
 export const downloadPortalReport = (days = 90) =>
   downloadFile('/portal/provider/report.csv', `claims-${days}d.csv`, { days });
 
+// ─── TrustScore appeals (staff review) ─────────────────────────────────────────
+
+export interface StaffAppeal extends PortalAppeal {
+  providerCode: string;
+  providerName: string;
+}
+
+export const fetchAppeals = () => api.get<StaffAppeal[]>('/trustscore/appeals');
+export const resolveAppeal = (id: string, outcome: 'UPHELD' | 'REJECTED', outcomeNotes: string) =>
+  api.patch<PortalAppeal>(`/trustscore/appeals/${encodeURIComponent(id)}`, { outcome, outcomeNotes });
+
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
