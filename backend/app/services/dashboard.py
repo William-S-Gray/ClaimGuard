@@ -25,7 +25,9 @@ class DashboardService:
         # Scoped to today like the card it sits under. It used to count every
         # approval ever, so "0 claims today" sat over "2 auto-approved".
         auto_approved = await self.claims.count_by_decision_since("APPROVE", today)
-        disputed = await self.claims.count_by_decision("MEMBER_DISPUTED")
+        # A dispute is recorded as the member's reply (and a flag), never as a
+        # decision, so counting decision == "MEMBER_DISPUTED" always gave 0.
+        disputed = await self.claims.count_member_alerts(response="DISPUTED")
         avg_latency = await self.claims.avg_latency()
         saved = await self.claims.sum_estimated_saved()
 
