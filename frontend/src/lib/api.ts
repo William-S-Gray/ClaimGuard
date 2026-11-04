@@ -384,6 +384,7 @@ export interface MemberAlert {
   memberName: string;
   message: string;
   delivered: boolean;
+  ussdCode: string;
 }
 
 export interface MemberAlertResult {

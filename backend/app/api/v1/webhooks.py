@@ -14,7 +14,7 @@ from app.core.dependencies import DbSession, client_ip
 from app.core.logging import get_logger
 from app.repositories.claim import ClaimRepository
 from app.services.audit import AuditService
-from app.services.claims import USSD_CODE, ClaimService, compose_ussd_menu
+from app.services.claims import ClaimService, compose_ussd_menu
 
 log = get_logger(__name__)
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
@@ -96,7 +96,9 @@ async def ussd_session(request: Request, db: DbSession) -> Response:
         return PlainTextResponse("CON " + compose_ussd_menu(claim))
 
     if choice not in ("1", "2"):
-        return PlainTextResponse(f"END Invalid choice. Dial {USSD_CODE} to try again.")
+        return PlainTextResponse(
+            f"END Invalid choice. Dial {settings.ussd_code} to try again."
+        )
     matched = await _apply_reply(db, request, phone, choice, via="USSD")
     if not matched:
         return PlainTextResponse("END ClaimGuard: no claims are waiting for your reply.")

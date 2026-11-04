@@ -176,6 +176,8 @@ export interface USSDStats {
   confirmed: number;
   disputed: number;
   awaitingReply: number;
+  /** The USSD code members dial; configured server-side (USSD_CODE). */
+  code: string;
 }
 
 // ─── Demo ─────────────────────────────────────────────────────────────────────

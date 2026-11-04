@@ -27,7 +27,7 @@ interface Screen {
 
 const SCREENS: Record<ScreenKey, Screen> = {
   home: {
-    title: 'CIMAS CLAIMGUARD 360°\n*483*360#',
+    title: 'CIMAS CLAIMGUARD 360°\n{code}', // {code}: the configured USSD code
     body: [
       'Hi Tendai!',
       'ClaimGuard is protecting',
@@ -181,6 +181,7 @@ export function USSDSimulatorPage() {
   const [history, setHistory] = useState<ScreenKey[]>([]);
   const { data: stats } = useQuery({ queryKey: ['ussd-stats'], queryFn: fetchUSSDStats });
 
+  const ussdCode = stats?.code ?? '';
   const screen = SCREENS[currentScreen];
 
   const navigate = (next: ScreenKey) => {
@@ -202,7 +203,7 @@ export function USSDSimulatorPage() {
   };
 
   return (
-    <AppShell title="USSD Simulator" subtitle="*483*360# · Econet · NetOne · Telecel">
+    <AppShell title="USSD Simulator" subtitle={`${ussdCode || 'USSD'} · Econet · NetOne · Telecel`}>
       <div className="max-w-screen-xl mx-auto space-y-5">
 
         {/* Carrier + stats */}
@@ -223,7 +224,7 @@ export function USSDSimulatorPage() {
                   {/* Screen */}
                   <div className="bg-[#B5D5A0] p-4 min-h-64 font-mono text-xs text-gray-900">
                     <div className="whitespace-pre-line font-bold text-[10px] text-gray-700 mb-1 border-b border-gray-400 pb-1">
-                      {screen.title}
+                      {screen.title.replace('{code}', ussdCode)}
                     </div>
                     <div className="mt-2 space-y-0.5 text-[11px] leading-relaxed">
                       {screen.body.map((line, i) => (

@@ -119,3 +119,38 @@ async def test_ussd_with_nothing_pending(client: AsyncClient, gateway):
     body = urlencode({"sessionId": "s2", "phoneNumber": "+263000000000", "text": ""})
     resp = await client.post("/api/v1/webhooks/ussd", content=body, headers=gateway)
     assert resp.text.startswith("END ClaimGuard: no claims")
+
+
+async def test_ussd_code_comes_from_settings(
+    client: AsyncClient, auth_headers: dict, gateway, monkeypatch
+):
+    monkeypatch.setattr(settings, "ussd_code", "*999*1#")
+
+    stats = await client.get("/api/v1/dashboard/ussd", headers=auth_headers)
+    assert stats.json()["data"]["code"] == "*999*1#"
+
+    alert = await client.post(
+        "/api/v1/claims/CG-00882/member-alert", headers=auth_headers, json={"channel": "USSD"}
+    )
+    data = alert.json()["data"]
+    assert data["alert"]["ussdCode"] == "*999*1#"
+    # Earlier tests alerted this claim too: check the newest such event.
+    undelivered = max(
+        (t for t in data["claim"]["timeline"] if t["event"] == "Member alert not delivered"),
+        key=lambda t: t["timestamp"],
+    )
+    assert "*999*1#" in undelivered["description"]
+
+    phone = data["alert"]["to"].replace(" ", "")
+    bad = await client.post(
+        "/api/v1/webhooks/ussd",
+        content=urlencode({"sessionId": "s3", "phoneNumber": phone, "text": "7"}),
+        headers=gateway,
+    )
+    assert "*999*1#" in bad.text
+
+
+def test_default_ussd_code_matches_demo_screens():
+    from app.core.config import Settings
+
+    assert Settings().ussd_code == "*483*360#"

@@ -72,7 +72,7 @@ function PhoneFrame({
               <div className="min-w-0">
                 <p className="text-[11px] font-semibold text-gray-800 leading-tight">Cimas ClaimGuard</p>
                 <p className="text-[9px] text-gray-400 leading-tight">
-                  {alert.channel === 'USSD' ? '*483*360#' : alert.to}
+                  {alert.channel === 'USSD' ? alert.ussdCode : alert.to}
                 </p>
               </div>
               <span className="ml-auto text-[8px] uppercase tracking-wide text-gray-400">

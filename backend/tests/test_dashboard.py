@@ -32,9 +32,11 @@ async def test_savings_chart_is_built_from_the_claims(client: AsyncClient, auth_
 async def test_ussd_counts_add_up(client: AsyncClient, auth_headers: dict):
     data = (await client.get("/api/v1/dashboard/ussd", headers=auth_headers)).json()["data"]
 
-    assert set(data) == {"alertsSent", "confirmed", "disputed", "awaitingReply"}
+    counts = {"alertsSent", "confirmed", "disputed", "awaitingReply"}
+    assert set(data) == counts | {"code"}
+    assert data["code"]  # the configured USSD code
     assert data["confirmed"] + data["disputed"] + data["awaitingReply"] == data["alertsSent"]
-    assert min(data.values()) >= 0
+    assert min(data[k] for k in counts) >= 0
 
 
 async def test_member_alerts_counts_disputed_replies(client: AsyncClient, auth_headers: dict):
