@@ -175,6 +175,39 @@ async def test_disputed_claim_is_not_rated(client: AsyncClient, auth_headers: di
 
 async def test_portal_shows_member_satisfaction(client: AsyncClient, portal_headers: dict):
     data = (await client.get(f"{PORTAL}/dashboard", headers=portal_headers)).json()["data"]
-    assert "memberRatings" in data["breakdown"]
-    sat = data["breakdown"]["memberSatisfaction"]
-    assert sat is None or 1 <= sat <= 5
+    assert data["breakdown"]["memberRatings"] >= 1  # the seeded CG-00603
+    assert 1 <= data["breakdown"]["memberSatisfaction"] <= 5
+
+
+async def test_seed_has_a_claim_waiting_on_the_portal_provider(
+    client: AsyncClient, auth_headers: dict, portal_headers: dict
+):
+    rows = (await client.get(f"{PORTAL}/claims", headers=portal_headers)).json()["data"]
+    row = next(r for r in rows if r["claimRef"] == "CG-00517")
+    assert row["status"] == "INFO_NEEDED" and row["infoRequest"]
+
+    staff = (await client.get("/api/v1/claims/CG-00517", headers=auth_headers)).json()["data"]
+    assert staff["slaDeadline"] is None  # paused
+
+
+def test_demo_ratings_track_provider_quality():
+    from types import SimpleNamespace
+
+    from app.services.demo_activity import _rate
+
+    def ratings(trust: int) -> list[int]:
+        out = []
+        for i in range(200):
+            claim = SimpleNamespace(
+                claim_ref=f"CG-T{trust}-{i}", member_rating=None, timeline=[],
+                provider=SimpleNamespace(trust_score=trust, name="P"),
+            )
+            _rate(claim, datetime.now(UTC))
+            if claim.member_rating is not None:
+                out.append(claim.member_rating)
+        return out
+
+    good, poor = ratings(90), ratings(40)
+    assert 100 < len(good) < 200  # most rate, not all
+    assert all(1 <= r <= 5 for r in good + poor)
+    assert sum(good) / len(good) > sum(poor) / len(poor)

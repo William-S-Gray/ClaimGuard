@@ -225,6 +225,7 @@ async def seed_claims(session) -> None:
             member_notification_sent=c.get("member_notification_sent", False),
             member_notification_channel=c.get("member_notification_channel"),
             member_response=c.get("member_response", "PENDING"),
+            member_rating=c.get("member_rating"),
         )
         claim.items = [
             ClaimItem(
@@ -263,6 +264,21 @@ async def seed_claims(session) -> None:
                 type="system",
             ),
         ]
+        if req := c.get("info_request"):
+            # Waiting on the provider: SLA paused, time left kept (as ClaimService does).
+            claim.timeline.append(
+                TimelineEvent(
+                    timestamp=parse_dt(req["at"]),
+                    event="Information requested",
+                    description=req["message"],
+                    actor=req["actor"],
+                    type="agent",
+                    event_metadata={
+                        "previousDecision": req["previous_decision"],
+                        "slaRemainingSeconds": req["sla_left_hours"] * 3600,
+                    },
+                )
+            )
         session.add(claim)
     await session.flush()
     log.info("seed.claims", count=len(sd.CLAIMS))
