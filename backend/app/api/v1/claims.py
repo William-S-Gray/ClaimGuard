@@ -149,10 +149,26 @@ async def add_note(
     dependencies=[Depends(require_permission("claim:approve"))],
     summary="Send a MemberGuard verification alert")
 async def member_alert(
-    claim_ref: str, payload: MemberAlertPayload, db: DbSession, user: CurrentUserDep
+    claim_ref: str,
+    payload: MemberAlertPayload,
+    db: DbSession,
+    user: CurrentUserDep,
+    request: Request,
 ) -> dict:
     result = await ClaimService(db).send_member_alert(
         claim_ref, payload.channel, actor=user.id
+    )
+    await AuditService(db).record(
+        action="claim.member_alert",
+        entity_type="claim",
+        entity_id=claim_ref,
+        actor_id=user.id,
+        request_id=getattr(request.state, "request_id", None),
+        ip_address=client_ip(request),
+        changes={
+            "channel": result["alert"]["channel"],
+            "delivered": result["alert"]["delivered"],
+        },
     )
     return success(result, "Alert sent")
 
@@ -162,9 +178,22 @@ async def member_alert(
     dependencies=[Depends(require_permission("claim:approve"))],
     summary="Record a member's confirmation reply")
 async def member_response(
-    claim_ref: str, payload: MemberResponsePayload, db: DbSession, _: CurrentUserDep
+    claim_ref: str,
+    payload: MemberResponsePayload,
+    db: DbSession,
+    user: CurrentUserDep,
+    request: Request,
 ) -> dict:
     data = await ClaimService(db).record_member_response(claim_ref, payload.response)
+    await AuditService(db).record(
+        action="claim.member_response",
+        entity_type="claim",
+        entity_id=claim_ref,
+        actor_id=user.id,
+        request_id=getattr(request.state, "request_id", None),
+        ip_address=client_ip(request),
+        changes={"response": data["memberResponse"], "via": "STAFF"},
+    )
     return success(data, "Response recorded")
 
 

@@ -1,13 +1,13 @@
 """Claims application service — queue, detail, lifecycle actions, scoring."""
 from __future__ import annotations
 
-import contextlib
 import uuid
 from datetime import UTC, datetime, timedelta
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.exceptions import BusinessRuleError, NotFoundError
+from app.core.logging import get_logger
 from app.core.websocket import WSEventType, publish
 from app.models.claim import Claim, ClaimFlag, ClaimItem, ShapContribution, TimelineEvent
 from app.modules.fraudshield import ScoringContext, ScoringResult
@@ -25,8 +25,11 @@ _SLA_HOURS = 48
 
 _REJECT_REASONS = {"REJECT_FRAUD", "REJECT_ERROR"}
 
-# MemberGuard: channels a member can be alerted on, and the responses they can give.
-_MEMBER_CHANNELS = {"SMS", "WHATSAPP", "USSD"}
+log = get_logger(__name__)
+
+# MemberGuard: channels a member can be alerted on (in fallback order), and the
+# responses they can give. If every channel fails the alert still shows in-app.
+_MEMBER_CHANNELS = ("WHATSAPP", "SMS", "USSD")
 _MEMBER_RESPONSES = {"CONFIRMED", "DISPUTED"}
 
 
@@ -155,18 +158,28 @@ class ClaimService:
             raise NotFoundError(f"Claim {claim_ref} not found")
 
         message = _compose_member_alert(claim)
+        # Requested channel first, then the rest of the fallback chain.
+        delivered = False
+        for candidate in (channel, *(c for c in _MEMBER_CHANNELS if c != channel)):
+            adapter = CHANNELS.get(candidate)
+            try:
+                if adapter and await adapter.send(
+                    claim.member.phone, "Claim verification", message
+                ):
+                    channel, delivered = candidate, True
+                    break
+            except Exception as exc:  # noqa: BLE001 - try the next channel
+                log.warning(
+                    "member_alert.channel_failed",
+                    claim_ref=claim_ref,
+                    channel=candidate,
+                    error=str(exc),
+                )
+
         claim.member_notification_sent = True
         claim.member_notification_channel = channel
         claim.member_response = "PENDING"
         claim.updated_by = actor
-
-        delivered = False
-        adapter = CHANNELS.get(channel)
-        if adapter is not None:
-            with contextlib.suppress(Exception):
-                delivered = await adapter.send(
-                    claim.member.phone, "Claim verification", message
-                )
 
         await self._add_timeline(
             claim,

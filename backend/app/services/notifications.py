@@ -74,7 +74,7 @@ class TwilioWhatsAppAdapter:
         )
         form = {
             "From": f"whatsapp:{settings.twilio_whatsapp_from}",
-            "To": f"whatsapp:{to}",
+            "To": f"whatsapp:{to.replace(' ', '')}",  # Twilio needs E.164
             "Body": f"*{title}*\n\n{message}",
         }
         async with httpx.AsyncClient(timeout=15) as client:
