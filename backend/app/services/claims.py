@@ -33,8 +33,34 @@ _MEMBER_CHANNELS = ("WHATSAPP", "SMS", "USSD")
 _MEMBER_RESPONSES = {"CONFIRMED", "DISPUTED"}
 
 
-def _compose_member_alert(claim: Claim) -> str:
+SMS_LIMIT = 160  # one SMS segment; longer texts split and cost more
+USSD_CODE = "*277#"
+
+
+def compose_sms_alert(claim: Claim) -> str:
+    """Single-segment SMS. The provider name is trimmed to fit, never the reply hint."""
+    amount = f"US${float(claim.claimed_amount):,.2f}"
+    head = f"ClaimGuard: {amount} claimed at "
+    tail = f" on {claim.service_date or 'recently'}. Was this you? Reply YES or NO"
+    room = SMS_LIMIT - len(head) - len(tail)
+    provider = claim.provider.name
+    if len(provider) > room:
+        provider = provider[: room - 1] + "…"
+    return head + provider + tail
+
+
+def compose_ussd_menu(claim: Claim) -> str:
+    """The menu a member sees after dialling USSD_CODE."""
+    amount = f"US${float(claim.claimed_amount):,.2f}"
+    return f"ClaimGuard Alert\nClaim: {amount} at {claim.provider.name}\nCorrect?\n1=Yes 2=No"
+
+
+def compose_member_alert(claim: Claim, channel: str = "WHATSAPP") -> str:
     """The verification message a member receives for a flagged claim."""
+    if channel == "SMS":
+        return compose_sms_alert(claim)
+    if channel == "USSD":
+        return compose_ussd_menu(claim)
     amount = f"US${float(claim.claimed_amount):,.2f}"
     provider = claim.provider.name
     service = claim.service_date or "recently"
@@ -157,16 +183,17 @@ class ClaimService:
         if not claim:
             raise NotFoundError(f"Claim {claim_ref} not found")
 
-        message = _compose_member_alert(claim)
         # Requested channel first, then the rest of the fallback chain.
         delivered = False
+        message = compose_member_alert(claim, channel)
         for candidate in (channel, *(c for c in _MEMBER_CHANNELS if c != channel)):
             adapter = CHANNELS.get(candidate)
+            text = compose_member_alert(claim, candidate)
             try:
                 if adapter and await adapter.send(
-                    claim.member.phone, "Claim verification", message
+                    claim.member.phone, "Claim verification", text
                 ):
-                    channel, delivered = candidate, True
+                    channel, delivered, message = candidate, True, text
                     break
             except Exception as exc:  # noqa: BLE001 - try the next channel
                 log.warning(
@@ -181,14 +208,33 @@ class ClaimService:
         claim.member_response = "PENDING"
         claim.updated_by = actor
 
-        await self._add_timeline(
-            claim,
-            "Member alert sent",
-            f"{channel} verification alert sent to {claim.member.name} "
-            f"({claim.member.phone})",
-            actor,
-            type_="system",
-        )
+        if delivered:
+            await self._add_timeline(
+                claim,
+                "Member alert sent",
+                f"{channel} verification alert sent to {claim.member.name} "
+                f"({claim.member.phone})",
+                actor,
+                type_="system",
+            )
+        else:
+            # Nothing reached the member: say so, and hand it to a person.
+            log.warning("member_alert.undelivered", claim_ref=claim_ref)
+            await self._add_timeline(
+                claim,
+                "Member alert not delivered",
+                f"No channel could reach {claim.member.name}; the member can still "
+                f"answer by dialling {USSD_CODE}. Follow up manually.",
+                actor,
+                type_="system",
+            )
+            await NotificationService(self.session).create(
+                user_id=None,
+                title="Member alert needs manual follow-up",
+                message=f"Verification alert for claim {claim_ref} could not be delivered.",
+                type_="warning",
+                link=f"/queue/{claim_ref}",
+            )
         await self.session.flush()
         publish(WSEventType.QUEUE_UPDATED, {"claimRef": claim_ref})
         return {

@@ -20,10 +20,18 @@ class _Boom:
         raise RuntimeError("twilio down")
 
 
+class _Ok:
+    channel = "SMS"
+
+    async def send(self, to, title, message):
+        return True
+
+
 async def test_alert_falls_back_to_next_channel(
     client: AsyncClient, auth_headers: dict, monkeypatch
 ):
     monkeypatch.setitem(notif_mod.CHANNELS, "WHATSAPP", _Boom())
+    monkeypatch.setitem(notif_mod.CHANNELS, "SMS", _Ok())
     resp = await client.post(
         "/api/v1/claims/CG-00291/member-alert",
         headers=auth_headers,
