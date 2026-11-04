@@ -123,7 +123,7 @@ export function ClaimDetailPage() {
                     <div><span className="text-gray-400">NH263 Ref</span><p className="font-medium text-gray-700">{claim.nh263Ref}</p></div>
                     <div><span className="text-gray-400">Service Date</span><p className="font-medium text-gray-700">{formatDate(claim.serviceDate)}</p></div>
                     <div><span className="text-gray-400">Submitted</span><p className="font-medium text-gray-700">{formatTimeAgo(claim.submittedAt)}</p></div>
-                    <div><span className="text-gray-400">SLA Deadline</span><p className="font-medium text-gray-700">{formatDate(claim.slaDeadline)}</p></div>
+                    <div><span className="text-gray-400">SLA Deadline</span><p className="font-medium text-gray-700">{claim.slaDeadline ? formatDate(claim.slaDeadline) : 'Paused'}</p></div>
                   </div>
                 </div>
               </div>
@@ -338,7 +338,11 @@ export function ClaimDetailPage() {
               <div className="mt-4 p-3 bg-amber-50 border border-amber-100 rounded-xl">
                 <div className="flex items-center gap-2 text-xs text-amber-700">
                   <Clock size={12} />
-                  <span>SLA: {formatDateTime(claim.slaDeadline)}</span>
+                  <span>
+                    {claim.slaDeadline
+                      ? `SLA: ${formatDateTime(claim.slaDeadline)}`
+                      : 'SLA paused while waiting on the provider'}
+                  </span>
                 </div>
               </div>
             </div>

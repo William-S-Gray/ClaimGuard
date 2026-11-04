@@ -204,11 +204,20 @@ class ClaimService:
             raise BusinessRuleError("Already waiting on the provider")
 
         previous = claim.decision
+        # Stop the SLA clock while the provider has the ball; keep what was left.
+        remaining = None
+        if claim.sla_deadline:
+            deadline = claim.sla_deadline.replace(tzinfo=claim.sla_deadline.tzinfo or UTC)
+            remaining = max(0, int((deadline - datetime.now(UTC)).total_seconds()))
+        claim.sla_deadline = None
         claim.decision = "INFO_NEEDED"
         claim.updated_by = actor
         await self._add_timeline(claim, INFO_REQUESTED, message, actor)
         # Remember where the claim was so the provider's answer puts it back.
-        claim.timeline[-1].event_metadata = {"previousDecision": previous}
+        claim.timeline[-1].event_metadata = {
+            "previousDecision": previous,
+            "slaRemainingSeconds": remaining,
+        }
         await self.session.flush()
         publish(WSEventType.QUEUE_UPDATED, {"claimRef": claim_ref, "decision": "INFO_NEEDED"})
         return claim_to_detail(claim)
@@ -224,10 +233,11 @@ class ClaimService:
         if claim.decision != "INFO_NEEDED":
             raise BusinessRuleError("No information has been requested for this claim")
 
-        request = latest_info_request(claim)
-        claim.decision = (
-            (request.event_metadata or {}).get("previousDecision") if request else None
-        ) or "PEND_VERIFY"
+        meta = (latest_info_request(claim) or TimelineEvent()).event_metadata or {}
+        claim.decision = meta.get("previousDecision") or "PEND_VERIFY"
+        remaining = meta.get("slaRemainingSeconds")
+        if remaining is not None:
+            claim.sla_deadline = datetime.now(UTC) + timedelta(seconds=remaining)
         claim.updated_by = actor
         await self._add_timeline(
             claim, "Provider supplied information", response, actor, type_="provider"
