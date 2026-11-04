@@ -31,6 +31,7 @@ async def _prepare_database():
         await seed.seed_team(session)
         await seed.seed_members(session)
         await seed.seed_providers(session)
+        await seed.seed_provider_users(session)
         await seed.seed_claims(session)
         await seed.seed_notifications(session)
         await seed.seed_audit(session)

@@ -50,7 +50,10 @@ class AuthService:
 
     async def _issue_tokens(self, user: User) -> dict:
         access = create_access_token(
-            str(user.id), roles=user.role_names, permissions=user.permission_codes
+            str(user.id),
+            roles=user.role_names,
+            permissions=user.permission_codes,
+            provider_id=str(user.provider_id) if user.provider_id else None,
         )
         refresh, jti, expires = create_refresh_token(str(user.id))
         await self.tokens.create(user_id=user.id, jti=jti, expires_at=expires)

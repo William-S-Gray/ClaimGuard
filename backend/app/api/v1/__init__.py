@@ -17,13 +17,14 @@ from app.api.v1 import (
     investigations,
     members,
     notifications,
+    portal,
     providers,
     trustscore,
     users,
     websocket,
 )
 from app.core.config import settings
-from app.core.dependencies import get_current_user
+from app.core.dependencies import get_staff_user
 
 api_router = APIRouter()
 
@@ -33,7 +34,8 @@ api_router.include_router(auth.router)        # login / refresh / logout
 api_router.include_router(websocket.router)   # authenticates via token on connect
 
 # ── Authenticated (PHI + actions) ───────────────────────────────────────────────
-protected = [Depends(get_current_user)]
+# Staff only: a provider-portal login is rejected here even with a valid token.
+protected = [Depends(get_staff_user)]
 api_router.include_router(claims.router, dependencies=protected)
 api_router.include_router(providers.router, dependencies=protected)
 api_router.include_router(trustscore.router, dependencies=protected)
@@ -44,6 +46,9 @@ api_router.include_router(investigations.router, dependencies=protected)
 api_router.include_router(users.router, dependencies=protected)
 api_router.include_router(notifications.router, dependencies=protected)
 api_router.include_router(audit.router, dependencies=protected)
+
+# ── Provider portal (provider accounts only; scoped to their own provider) ─────
+api_router.include_router(portal.router)
 
 # ── Demo-only (scripted scenarios / mock broadcasts) ─────────────────────────────
 # Never expose the demo scenario runner in a real deployment.

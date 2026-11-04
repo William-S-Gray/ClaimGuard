@@ -6,6 +6,7 @@ ROLES = {
     "analyst": "Fraud analytics & TrustScore management",
     "agent": "Investigation queue handling",
     "auditor": "Read-only audit & compliance access",
+    "provider": "Provider portal: own TrustScore, claims and appeals only",
 }
 
 PERMISSIONS = {
@@ -23,7 +24,13 @@ ROLE_PERMISSIONS = {
     "analyst": ["claim:read", "provider:manage", "investigation:manage", "audit:read"],
     "agent": ["claim:read", "claim:approve", "claim:reject", "investigation:manage"],
     "auditor": ["claim:read", "audit:read"],
+    "provider": [],  # scoped by users.provider_id, never by staff permissions
 }
+
+# Demo provider-portal logins: (full name, email, provider seed id).
+PROVIDER_USERS = [
+    ("City Pharmacy Bulawayo", "portal@citypharmacy.co.zw", "prov-001"),
+]
 
 MEMBERS = [
     {

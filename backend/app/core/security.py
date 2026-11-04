@@ -51,13 +51,19 @@ def _create_token(
 
 
 def create_access_token(
-    subject: str, roles: list[str] | None = None, permissions: list[str] | None = None
+    subject: str,
+    roles: list[str] | None = None,
+    permissions: list[str] | None = None,
+    provider_id: str | None = None,
 ) -> str:
+    claims: dict[str, Any] = {"roles": roles or [], "perms": permissions or []}
+    if provider_id:
+        claims["prov"] = provider_id  # provider-portal account
     token, _, _ = _create_token(
         subject,
         "access",
         timedelta(minutes=settings.access_token_expire_minutes),
-        {"roles": roles or [], "perms": permissions or []},
+        claims,
     )
     return token
 

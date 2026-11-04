@@ -19,11 +19,21 @@ bearer_scheme = HTTPBearer(auto_error=False)
 DbSession = Annotated[AsyncSession, Depends(get_db)]
 
 
+# Internal (insurer) roles. Everything under the staff routers needs one of them;
+# provider-portal accounts never have one, so they are locked out by default.
+STAFF_ROLES = {"admin", "analyst", "agent", "auditor"}
+
+
 @dataclass(slots=True)
 class CurrentUser:
     id: str
     roles: list[str]
     permissions: list[str]
+    provider_id: str | None = None
+
+    @property
+    def is_staff(self) -> bool:
+        return self.provider_id is None and self.has_any_role(STAFF_ROLES)
 
     @property
     def is_superuser(self) -> bool:
@@ -52,10 +62,28 @@ async def get_current_user(
         id=payload["sub"],
         roles=payload.get("roles", []),
         permissions=payload.get("perms", []),
+        provider_id=payload.get("prov"),
     )
 
 
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
+
+
+async def get_staff_user(user: CurrentUserDep) -> CurrentUser:
+    """Insurer staff only. Guards every PHI/operations router."""
+    if not user.is_staff:
+        raise PermissionDeniedError("Staff access only")
+    return user
+
+
+async def get_provider_user(user: CurrentUserDep) -> CurrentUser:
+    """Provider-portal accounts only; `provider_id` scopes every query."""
+    if not user.provider_id or "provider" not in user.roles:
+        raise PermissionDeniedError("Provider portal access only")
+    return user
+
+
+ProviderUserDep = Annotated[CurrentUser, Depends(get_provider_user)]
 
 
 def require_roles(*roles: str) -> Callable:

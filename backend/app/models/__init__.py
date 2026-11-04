@@ -11,7 +11,7 @@ from app.models.claim import (
 from app.models.investigation import Investigation, InvestigationComment
 from app.models.member import Member
 from app.models.notification import Notification
-from app.models.provider import Provider, TrustScoreSnapshot
+from app.models.provider import Provider, ProviderAppeal, TrustScoreSnapshot
 from app.models.user import (
     Permission,
     RefreshToken,
@@ -35,6 +35,7 @@ __all__ = [
     "Member",
     "Notification",
     "Provider",
+    "ProviderAppeal",
     "TrustScoreSnapshot",
     "User",
     "Role",

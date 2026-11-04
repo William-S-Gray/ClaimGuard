@@ -125,6 +125,7 @@ async def me(user: CurrentUserDep, db: DbSession) -> dict:
         is_superuser=db_user.is_superuser,
         roles=db_user.role_names,
         permissions=db_user.permission_codes,
+        provider_id=str(db_user.provider_id) if db_user.provider_id else None,
         last_login_at=db_user.last_login_at,
     )
     return success(out.model_dump(by_alias=True), "OK")

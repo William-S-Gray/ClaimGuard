@@ -33,6 +33,7 @@ class UserOut(CamelModel):
     is_superuser: bool
     roles: list[str] = []
     permissions: list[str] = []
+    provider_id: str | None = None  # set for provider-portal accounts
     last_login_at: datetime | None = None
 
 
