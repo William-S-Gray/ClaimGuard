@@ -4,8 +4,11 @@ from __future__ import annotations
 import calendar
 from datetime import UTC, datetime, timedelta
 
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.models.claim import Claim
+from app.models.investigation import Investigation
 from app.repositories.claim import ClaimRepository
 from app.schemas.dashboard import DashboardMetrics, SavingsDataPoint, USSDStats
 
@@ -45,6 +48,50 @@ class DashboardService:
             avg_latency_ms=int(avg_latency),
             detection_rate=detection_rate,
         ).model_dump(by_alias=True)
+
+    async def investigator(self) -> dict:
+        """Investigator KPIs. Ratios are None until there is data behind them."""
+        pending = await self.claims.count_by_decision("PEND_INVESTIGATE")
+
+        closed = (
+            await self.session.execute(
+                select(
+                    Investigation.created_at,
+                    Investigation.resolved_at,
+                    Investigation.resolution,
+                )
+                .where(
+                    Investigation.resolved_at.is_not(None),
+                    Investigation.deleted_at.is_(None),
+                )
+            )
+        ).all()
+        hours = [(r.resolved_at - r.created_at).total_seconds() / 3600 for r in closed]
+        # Accuracy: of cases closed with a verdict, how many flags were real fraud.
+        fraud = sum(r.resolution in ("CONFIRMED_FRAUD", "RECOVERED") for r in closed)
+        false_pos = sum(r.resolution == "FALSE_POSITIVE" for r in closed)
+
+        by_level = dict(
+            (
+                await self.session.execute(
+                    select(Claim.risk_level, func.count())
+                    .where(Claim.deleted_at.is_(None))
+                    .group_by(Claim.risk_level)
+                )
+            ).all()
+        )
+        return {
+            "pendingClaims": pending,
+            "avgReviewHours": round(sum(hours) / len(hours), 1) if hours else None,
+            "casesResolved": len(closed),
+            "detectionAccuracy": (
+                round(100 * fraud / (fraud + false_pos), 1) if fraud + false_pos else None
+            ),
+            "riskDistribution": {
+                level: int(by_level.get(level, 0))
+                for level in ("CRITICAL", "HIGH", "MEDIUM", "LOW")
+            },
+        }
 
     async def savings_series(self) -> list[dict]:
         """Loss avoided per calendar month over the last 12 months, oldest first.

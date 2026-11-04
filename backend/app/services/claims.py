@@ -86,12 +86,18 @@ class ClaimService:
         status: str | None,
         page: int,
         page_size: int,
+        risk_level: str | None = None,
+        investigator: str | None = None,
+        sort: str = "risk",
     ) -> tuple[list[dict], int]:
         offset = (max(page, 1) - 1) * page_size
         rows, total = await self.repo.query_queue(
             search=search,
             priority=priority,
             status=status,
+            risk_level=risk_level,
+            investigator=investigator,
+            sort=sort,
             offset=offset,
             limit=page_size,
         )
@@ -105,7 +111,9 @@ class ClaimService:
         claim = await self.repo.get_by_ref(claim_ref)
         if not claim:
             raise NotFoundError(f"Claim {claim_ref} not found")
-        return claim_to_detail(claim)
+        detail = claim_to_detail(claim)
+        detail["similarClaims"] = [claim_to_summary(c) for c in await self.repo.similar(claim)]
+        return detail
 
     # ── Lifecycle actions ──────────────────────────────────────────────────────
     async def _add_timeline(
