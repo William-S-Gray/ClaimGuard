@@ -191,6 +191,22 @@ export async function request<T>(path: string, options: RequestOptions = {}): Pr
   return payload ? payload.data : (null as T);
 }
 
+/** Fetch an authenticated file (e.g. a CSV report) and hand it to the browser. */
+export async function downloadFile(
+  path: string,
+  filename: string,
+  params?: RequestOptions['params'],
+): Promise<void> {
+  const response = await performFetch(path, { method: 'GET', params });
+  if (!response.ok) throw new ApiError(response.status, `Download failed (${response.status})`);
+  const url = URL.createObjectURL(await response.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
 export const api = {
   get: <T>(path: string, opts?: RequestOptions) => request<T>(path, { ...opts, method: 'GET' }),
   getEnvelope: <T>(path: string, opts?: RequestOptions) =>

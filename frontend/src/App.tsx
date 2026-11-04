@@ -9,6 +9,7 @@ import { useAuthStore } from '@/stores/authStore';
 import { realtimeClient } from '@/lib/realtime';
 import { ErrorBoundary } from '@/components/shared/ErrorBoundary';
 import { LoginPage } from '@/routes/LoginPage';
+import { ProviderPortalPage } from '@/routes/ProviderPortalPage';
 
 function AppInner() {
   const { connect } = useWSStore();
@@ -59,7 +60,7 @@ function AuthSplash() {
 }
 
 function AuthGate() {
-  const { status, bootstrap } = useAuthStore();
+  const { status, bootstrap, user } = useAuthStore();
 
   useEffect(() => {
     bootstrap();
@@ -67,6 +68,8 @@ function AuthGate() {
 
   if (status === 'loading') return <AuthSplash />;
   if (status === 'unauthenticated') return <LoginPage />;
+  // Provider accounts get only their portal: no staff router, no live feed.
+  if (user?.providerId) return <ProviderPortalPage />;
   return <AppInner />;
 }
 

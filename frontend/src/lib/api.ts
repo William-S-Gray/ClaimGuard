@@ -1,6 +1,6 @@
 // Real ClaimGuard API — backed by the FastAPI service.
 // Function signatures mirror the former mock layer so pages consume it unchanged.
-import { api } from './apiClient';
+import { api, downloadFile } from './apiClient';
 import type {
   Claim,
   Provider,
@@ -9,6 +9,7 @@ import type {
   DashboardMetrics,
   SavingsDataPoint,
   USSDStats,
+  TrustBadge,
 } from '@/types';
 
 // ─── Auth ───────────────────────────────────────────────────────────────────────
@@ -21,8 +22,61 @@ export interface AuthUser {
   isSuperuser: boolean;
   roles: string[];
   permissions: string[];
+  /** Set for provider-portal accounts: the only provider they can see. */
+  providerId?: string | null;
   lastLoginAt: string | null;
 }
+
+// ─── Provider portal (provider accounts only) ─────────────────────────────────
+
+export interface PortalDashboard {
+  provider: { code: string; name: string; type: string; city: string };
+  trustScore: number;
+  badge: TrustBadge;
+  changeFromLastMonth: number | null;
+  breakdown: {
+    claimAccuracy: number;
+    investigationSuccess: number | null;
+    investigationsClosed: number;
+    memberSatisfaction: number | null;
+    shortfallIndex: number;
+    flags90d: number;
+    totalClaims: number;
+    confidence: number;
+  };
+  peers: { region: string; count: number; average: number | null; percentile: number | null };
+  history: { score: number; badge: string; reason: string | null; createdAt: string }[];
+}
+
+export interface PortalClaim {
+  claimRef: string;
+  submittedAt: string;
+  serviceDate: string | null;
+  amount: number;
+  service: string | null;
+  member: string;
+  status: 'APPROVED' | 'UNDER_REVIEW' | 'DISPUTED' | 'REJECTED';
+  disputeReason: string | null;
+}
+
+export interface PortalAppeal {
+  id: string;
+  status: 'OPEN' | 'UPHELD' | 'REJECTED';
+  reason: string;
+  scoreAtSubmission: number;
+  outcomeNotes: string | null;
+  submittedAt: string;
+  resolvedAt: string | null;
+}
+
+export const fetchPortalDashboard = () => api.get<PortalDashboard>('/portal/provider/dashboard');
+export const fetchPortalClaims = (days = 30) =>
+  api.get<PortalClaim[]>('/portal/provider/claims', { params: { days } });
+export const fetchPortalAppeals = () => api.get<PortalAppeal[]>('/portal/provider/appeals');
+export const submitPortalAppeal = (reason: string) =>
+  api.post<PortalAppeal>('/portal/provider/appeals', { reason });
+export const downloadPortalReport = (days = 90) =>
+  downloadFile('/portal/provider/report.csv', `claims-${days}d.csv`, { days });
 
 export interface TokenPair {
   accessToken: string;

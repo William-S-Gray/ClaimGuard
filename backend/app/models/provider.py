@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 
-from sqlalchemy import ForeignKey, Integer, Numeric, String
+from sqlalchemy import DateTime, ForeignKey, Integer, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import GUID, BaseEntity
@@ -50,3 +51,19 @@ class TrustScoreSnapshot(BaseEntity):
     reason: Mapped[str | None] = mapped_column(String(255))
 
     provider: Mapped[Provider] = relationship(back_populates="trustscore_history")
+
+
+class ProviderAppeal(BaseEntity):
+    """A provider disputing its TrustScore; reviewed by staff."""
+
+    __tablename__ = "provider_appeals"
+
+    provider_id: Mapped[uuid.UUID] = mapped_column(
+        GUID, ForeignKey("providers.id", ondelete="CASCADE"), index=True
+    )
+    submitted_by: Mapped[uuid.UUID | None] = mapped_column(GUID, nullable=True)
+    score_at_submission: Mapped[int] = mapped_column(Integer)
+    reason: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(16), default="OPEN", index=True)
+    outcome_notes: Mapped[str | None] = mapped_column(Text)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

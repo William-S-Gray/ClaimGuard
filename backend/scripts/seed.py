@@ -173,6 +173,28 @@ async def seed_providers(session) -> None:
     log.info("seed.providers", count=len(sd.PROVIDERS))
 
 
+async def seed_provider_users(session) -> None:
+    """Demo provider-portal accounts, each linked to exactly one provider."""
+    role = (await session.execute(select(Role).where(Role.name == "provider"))).scalar_one()
+    for full_name, email, provider_seed_id in sd.PROVIDER_USERS:
+        if (
+            await session.execute(select(User).where(User.email == email))
+        ).scalar_one_or_none():
+            continue
+        user = User(
+            id=det_id(f"user:{email}"),
+            email=email,
+            full_name=full_name,
+            hashed_password=hash_password(settings.first_admin_password),
+            is_active=True,
+            provider_id=det_id(provider_seed_id),
+        )
+        user.roles = [role]
+        session.add(user)
+    await session.flush()
+    log.info("seed.provider_users", count=len(sd.PROVIDER_USERS))
+
+
 async def seed_claims(session) -> None:
     for c in sd.CLAIMS:
         cid = det_id(c["id"])
@@ -370,6 +392,7 @@ async def main(create_tables: bool = False) -> None:
             await seed_team(session)
             await seed_members(session)
             await seed_providers(session)
+            await seed_provider_users(session)
             await seed_claims(session)
             await seed_notifications(session)
             await seed_audit(session)

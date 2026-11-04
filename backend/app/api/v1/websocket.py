@@ -11,6 +11,7 @@ import asyncio
 import jwt
 from fastapi import APIRouter, WebSocket, status
 
+from app.core.dependencies import CurrentUser
 from app.core.logging import get_logger
 from app.core.security import decode_token
 from app.core.websocket import manager
@@ -23,8 +24,17 @@ log = get_logger(__name__)
 async def websocket_endpoint(websocket: WebSocket) -> None:
     token = websocket.query_params.get("token", "")
     try:
-        decode_token(token, expected_type="access")
+        payload = decode_token(token, expected_type="access")
     except jwt.PyJWTError:
+        await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+        return
+    # The feed carries claim/member events: staff only.
+    if not CurrentUser(
+        id=payload["sub"],
+        roles=payload.get("roles", []),
+        permissions=payload.get("perms", []),
+        provider_id=payload.get("prov"),
+    ).is_staff:
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
