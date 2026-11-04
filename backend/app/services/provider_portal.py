@@ -20,16 +20,12 @@ from app.models.investigation import Investigation
 from app.models.provider import Provider, ProviderAppeal, TrustScoreSnapshot
 from app.modules.trustscore.service import confidence
 from app.repositories.provider import ProviderRepository
+from app.schemas.claim import mask_name
 from app.services.providers import ProviderService
 
 APPEAL_OUTCOMES = {"UPHELD", "REJECTED"}
 # Closed cases where the claim turned out fine: they count for the provider.
 _LEGITIMATE = {"FALSE_POSITIVE", "NO_ACTION"}
-
-
-def mask_name(name: str) -> str:
-    """'Tendai Moyo' -> 'T. M.' (members are PII to the provider)."""
-    return " ".join(f"{part[0]}." for part in name.split() if part) or "Member"
 
 
 def claim_status(claim: Claim) -> str:

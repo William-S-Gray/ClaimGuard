@@ -84,3 +84,27 @@ async def test_claim_detail_lists_similar_claims(client: AsyncClient, auth_heade
         assert c["claimRef"] != "CG-00291"
         assert c["member"]["id"] == detail["member"]["id"]
         assert c["provider"]["code"] == detail["provider"]["code"]
+
+
+async def test_queue_rows_mask_member_details(client: AsyncClient, auth_headers: dict):
+    rows = await _queue(client, auth_headers)
+    target = next(r for r in rows if r["claimRef"] == "CG-00291")
+    assert target["member"]["name"] == "T. M."  # Tendai Moyo
+    assert set(target["member"]) == {"id", "name", "memberNumber", "plan"}
+    for row in rows:
+        for field in ("phone", "email", "dateOfBirth", "conditions"):
+            assert field not in row["member"]
+
+    # The audited detail view still has the full record.
+    detail = (await client.get("/api/v1/claims/CG-00291", headers=auth_headers)).json()["data"]
+    assert detail["member"]["name"] == "Tendai Moyo"
+    assert detail["member"]["phone"]
+    for similar in detail["similarClaims"]:
+        assert "phone" not in similar["member"]
+
+
+async def test_queue_search_still_matches_full_member_name(
+    client: AsyncClient, auth_headers: dict
+):
+    refs = {c["claimRef"] for c in await _queue(client, auth_headers, search="tendai")}
+    assert "CG-00291" in refs

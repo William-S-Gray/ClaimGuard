@@ -8,7 +8,7 @@ import { ApiError } from '@/lib/apiClient';
 import { AppShell } from '@/components/layout/AppShell';
 import { StatCard } from '@/components/shared/StatCard';
 import { EmptyState } from '@/components/shared/EmptyState';
-import type { Claim, RiskLevel } from '@/types';
+import type { Claim, ClaimSummary, RiskLevel } from '@/types';
 import { cn } from '@/lib/utils';
 import { formatCurrency } from '@/lib/formatters';
 import {
@@ -43,7 +43,7 @@ function initials(name: string) {
 function PhoneFrame({
   claim, alert, response, onRespond, responding,
 }: {
-  claim: Claim | null;
+  claim: ClaimSummary | null;
   alert: MemberAlert | null;
   response: 'CONFIRMED' | 'DISPUTED' | null;
   onRespond: (r: 'CONFIRMED' | 'DISPUTED') => void;
@@ -270,7 +270,9 @@ export function MemberGuardPage() {
                       <RiskPill level={activeClaim.riskLevel} />
                     </div>
                     <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1">
-                      <Phone size={11} /> {activeClaim.member.phone}
+                      <Phone size={11} />{' '}
+                      {/* Queue rows carry no contact details; the alert response does. */}
+                      {(activeClaim.member as { phone?: string }).phone ?? 'Number shown once the alert is sent'}
                     </p>
                     <p className="text-sm text-gray-600 mt-1">
                       {formatCurrency(activeClaim.claimedAmount)} at {activeClaim.provider.name}

@@ -24,6 +24,20 @@ class ClaimItemOut(CamelModel):
     nappi_code: str | None = None
 
 
+def mask_name(name: str) -> str:
+    """'Tendai Moyo' -> 'T. M.' for list views; the audited detail view has the full name."""
+    return " ".join(f"{part[0]}." for part in name.split() if part) or "Member"
+
+
+class MemberRef(CamelModel):
+    """Just enough to tell rows apart. No contact details, conditions or birth date."""
+
+    id: StrId
+    name: str  # masked
+    member_number: str
+    plan: str
+
+
 class ShapContributionOut(CamelModel):
     feature: str
     contribution: float
@@ -45,7 +59,7 @@ class ClaimSummary(CamelModel):
     id: str
     claim_ref: str
     nh263_ref: str | None = None
-    member: MemberOut
+    member: MemberRef
     provider: ProviderOut
     service_date: str | None = None
     submitted_at: datetime
@@ -61,8 +75,9 @@ class ClaimSummary(CamelModel):
 
 
 class ClaimOut(ClaimSummary):
-    """Full claim detail."""
+    """Full claim detail (each view is audited, so the full member is fine here)."""
 
+    member: MemberOut  # type: ignore[assignment]
     member_id: str
     provider_id: str
     approved_amount: float | None = None
@@ -115,7 +130,12 @@ def claim_to_summary(claim: Claim) -> dict:
         id=str(claim.id),
         claim_ref=claim.claim_ref,
         nh263_ref=claim.nh263_ref,
-        member=MemberOut.model_validate(claim.member),
+        member=MemberRef(
+            id=claim.member.id,
+            name=mask_name(claim.member.name),
+            member_number=claim.member.member_number,
+            plan=claim.member.plan,
+        ),
         provider=ProviderOut.model_validate(claim.provider),
         service_date=claim.service_date,
         submitted_at=claim.submitted_at,
