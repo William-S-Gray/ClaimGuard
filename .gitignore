@@ -6,3 +6,6 @@
 # OS / editor
 .DS_Store
 *.log
+
+# Dependencies (installed by npm ci / Vercel; never commit)
+node_modules/
