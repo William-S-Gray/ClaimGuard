@@ -7,9 +7,17 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import Select, func, or_, select
 
 from app.models.claim import Claim
+from app.models.investigation import Investigation
 from app.models.member import Member
 from app.models.provider import Provider
 from app.repositories.base import BaseRepository
+
+# Queue sort orders; ties fall back to newest first.
+QUEUE_SORTS = {
+    "risk": Claim.risk_score.desc(),
+    "amount": Claim.claimed_amount.desc(),
+    "newest": Claim.submitted_at.desc(),
+}
 
 # Decisions whose claimed amount counts as loss avoided: rejected, or held for investigation.
 SAVED_DECISIONS = ("REJECT_FRAUD", "REJECT_ERROR", "PEND_INVESTIGATE")
@@ -24,6 +32,8 @@ class ClaimRepository(BaseRepository[Claim]):
         search: str | None = None,
         priority: str | None = None,
         status: str | None = None,
+        risk_level: str | None = None,
+        investigator: str | None = None,
     ) -> Select:
         stmt = self._base_query()
         if search:
@@ -35,7 +45,9 @@ class ClaimRepository(BaseRepository[Claim]):
                     or_(
                         func.lower(Claim.claim_ref).like(like),
                         func.lower(Member.name).like(like),
+                        func.lower(Member.member_number).like(like),
                         func.lower(Provider.name).like(like),
+                        func.lower(Provider.code).like(like),
                     )
                 )
             )
@@ -43,6 +55,18 @@ class ClaimRepository(BaseRepository[Claim]):
             stmt = stmt.where(Claim.priority == priority)
         if status and status != "ALL":
             stmt = stmt.where(Claim.decision == status)
+        if risk_level and risk_level != "ALL":
+            stmt = stmt.where(Claim.risk_level == risk_level)
+        if investigator:
+            # Claims with a case assigned to this user.
+            stmt = stmt.where(
+                Claim.id.in_(
+                    select(Investigation.claim_id).where(
+                        Investigation.assigned_to == investigator,
+                        Investigation.deleted_at.is_(None),
+                    )
+                )
+            )
         return stmt
 
     async def get_by_ref(self, claim_ref: str) -> Claim | None:
@@ -55,15 +79,24 @@ class ClaimRepository(BaseRepository[Claim]):
         search: str | None = None,
         priority: str | None = None,
         status: str | None = None,
+        risk_level: str | None = None,
+        investigator: str | None = None,
+        sort: str = "risk",
         offset: int = 0,
         limit: int = 10,
     ) -> tuple[list[Claim], int]:
-        base = self._filtered_query(search=search, priority=priority, status=status)
+        base = self._filtered_query(
+            search=search,
+            priority=priority,
+            status=status,
+            risk_level=risk_level,
+            investigator=investigator,
+        )
 
         count_stmt = select(func.count()).select_from(base.subquery())
         total = int((await self.session.execute(count_stmt)).scalar_one())
 
-        stmt = base.order_by(Claim.risk_score.desc(), Claim.submitted_at.desc())
+        stmt = base.order_by(QUEUE_SORTS.get(sort, QUEUE_SORTS["risk"]), Claim.submitted_at.desc())
         stmt = stmt.offset(offset).limit(limit)
         rows = list((await self.session.execute(stmt)).scalars().unique().all())
         return rows, total
@@ -73,6 +106,20 @@ class ClaimRepository(BaseRepository[Claim]):
             self._base_query()
             .where(Claim.provider_id == provider_id)
             .order_by(Claim.submitted_at.desc())
+        )
+        return list((await self.session.execute(stmt)).scalars().unique().all())
+
+    async def similar(self, claim: Claim, limit: int = 5) -> list[Claim]:
+        """The same member's other claims at the same provider, newest first."""
+        stmt = (
+            self._base_query()
+            .where(
+                Claim.member_id == claim.member_id,
+                Claim.provider_id == claim.provider_id,
+                Claim.id != claim.id,
+            )
+            .order_by(Claim.submitted_at.desc())
+            .limit(limit)
         )
         return list((await self.session.execute(stmt)).scalars().unique().all())
 

@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import type { QueueFilters } from '@/types';
 
 interface UIState {
@@ -16,15 +17,21 @@ const DEFAULT_FILTERS: QueueFilters = {
   status: 'ALL',
 };
 
-export const useUIStore = create<UIState>((set) => ({
-  sidebarOpen: true,
-  queueFilters: DEFAULT_FILTERS,
+// Queue filters survive a reload so investigators come back to the same view.
+export const useUIStore = create<UIState>()(
+  persist(
+    (set) => ({
+      sidebarOpen: true,
+      queueFilters: DEFAULT_FILTERS,
 
-  setSidebarOpen: (open) => set({ sidebarOpen: open }),
-  toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
+      setSidebarOpen: (open) => set({ sidebarOpen: open }),
+      toggleSidebar: () => set((state) => ({ sidebarOpen: !state.sidebarOpen })),
 
-  setQueueFilters: (filters) =>
-    set((state) => ({ queueFilters: { ...state.queueFilters, ...filters } })),
+      setQueueFilters: (filters) =>
+        set((state) => ({ queueFilters: { ...state.queueFilters, ...filters } })),
 
-  resetQueueFilters: () => set({ queueFilters: DEFAULT_FILTERS }),
-}));
+      resetQueueFilters: () => set({ queueFilters: DEFAULT_FILTERS }),
+    }),
+    { name: 'claimguard-ui', partialize: (state) => ({ queueFilters: state.queueFilters }) },
+  ),
+);

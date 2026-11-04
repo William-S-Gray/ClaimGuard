@@ -18,6 +18,11 @@ async def metrics(db: DbSession) -> dict:
     return success(await DashboardService(db).metrics(), "Dashboard metrics")
 
 
+@router.get("/investigator", summary="Investigator KPIs: backlog, review time, accuracy")
+async def investigator(db: DbSession) -> dict:
+    return success(await DashboardService(db).investigator(), "Investigator KPIs")
+
+
 @router.get("/savings", summary="Savings trend series")
 async def savings(db: DbSession) -> dict:
     return success(await DashboardService(db).savings_series(), "Savings series")

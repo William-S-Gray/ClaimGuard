@@ -1,6 +1,9 @@
 """Claims & investigation-queue endpoints."""
 from __future__ import annotations
 
+import uuid
+from typing import Literal
+
 from fastapi import APIRouter, Depends, Query, Request
 from pydantic import BaseModel
 
@@ -42,11 +45,17 @@ async def list_claims(
     search: str | None = Query(None),
     priority: str | None = Query(None),
     status: str | None = Query(None),
+    risk_level: str | None = Query(None, alias="riskLevel"),
+    investigator: uuid.UUID | None = Query(None, description="Assigned user id"),
+    sort: Literal["risk", "amount", "newest"] = Query("risk"),
 ) -> dict:
     items, total = await ClaimService(db).queue(
         search=search,
         priority=priority,
         status=status,
+        risk_level=risk_level,
+        investigator=investigator,
+        sort=sort,
         page=pagination.page,
         page_size=pagination.page_size,
     )
