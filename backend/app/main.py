@@ -56,9 +56,12 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
+    # Never fall back to "*": with credentials on, Starlette then echoes any
+    # Origin back, so any website could use a visitor's refresh cookie. An empty
+    # list means same-origin only (the bundled nginx setup needs nothing more).
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origins or ["*"],
+        allow_origins=settings.cors_origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

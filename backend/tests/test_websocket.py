@@ -1,7 +1,8 @@
 """WebSocket gateway auth — the realtime PHI stream must reject unauthenticated sockets.
 
-Uses Starlette's sync TestClient (httpx's ASGI transport can't do WebSockets). Tokens
-are minted directly, so these tests touch neither the DB nor the app lifespan.
+Uses Starlette's sync TestClient (httpx's ASGI transport can't do WebSockets). The
+app lifespan isn't started; accepted sockets belong to seeded users, because the
+gateway checks the account in the database, not just the token.
 """
 from __future__ import annotations
 
@@ -9,10 +10,21 @@ import pytest
 from starlette.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
+from app.core.config import settings
 from app.core.security import create_access_token
 from app.main import app
 
 client = TestClient(app)  # no context manager → lifespan not started
+
+
+def _token_for(email: str) -> str:
+    """A real access token for a seeded user (the demo team shares one password)."""
+    resp = client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": settings.first_admin_password},
+    )
+    assert resp.status_code == 200, resp.text
+    return resp.json()["data"]["accessToken"]
 
 
 def test_ws_rejects_missing_token():
@@ -39,9 +51,7 @@ def test_ws_rejects_refresh_token():
 
 
 def test_ws_accepts_valid_access_token():
-    token = create_access_token(
-        "11111111-1111-1111-1111-111111111111", roles=["agent"], permissions=[]
-    )
+    token = _token_for("farai.nyathi@claimguard.co.zw")  # seeded agent
     with client.websocket_connect(f"/api/v1/ws?token={token}") as ws:
         welcome = ws.receive_json()  # server greets on connect
         assert welcome["type"] == "system_health"
@@ -60,6 +70,25 @@ def test_ws_accepts_valid_access_token():
 def test_ws_rejects_non_staff_tokens(roles, provider_id):
     token = create_access_token(
         "11111111-1111-1111-1111-111111111111", roles=roles, provider_id=provider_id
+    )
+    with pytest.raises(WebSocketDisconnect), client.websocket_connect(
+        f"/api/v1/ws?token={token}"
+    ):
+        pass
+
+
+def test_ws_rejects_a_real_provider_login():
+    token = _token_for("portal@citypharmacy.co.zw")
+    with pytest.raises(WebSocketDisconnect), client.websocket_connect(
+        f"/api/v1/ws?token={token}"
+    ):
+        pass
+
+
+def test_ws_rejects_a_valid_token_for_an_unknown_user():
+    # Signed and unexpired, but the account is gone: the database has the final say.
+    token = create_access_token(
+        "11111111-1111-1111-1111-111111111111", roles=["admin"], permissions=["*"]
     )
     with pytest.raises(WebSocketDisconnect), client.websocket_connect(
         f"/api/v1/ws?token={token}"
