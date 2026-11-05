@@ -14,6 +14,10 @@ import { useAuthStore } from '@/stores/authStore';
 import { ApiError } from '@/lib/apiClient';
 import { formatCurrency, formatDate, formatDateTime, formatTimeAgo } from '@/lib/formatters';
 import { ArrowLeft, CheckCircle, XCircle, AlertTriangle, Clock, Loader2, FolderSearch, MessageSquareMore } from 'lucide-react';
+import type { ClaimDecision } from '@/types';
+
+const FINAL_DECISIONS: ClaimDecision[] = ['APPROVE', 'REJECT_FRAUD', 'REJECT_ERROR'];
+const OVERRIDE_REASON_MIN = 10; // matches the API's minimum
 
 export function ClaimDetailPage() {
   const { claimRef } = useParams({ from: '/queue/$claimRef' });
@@ -37,8 +41,9 @@ export function ClaimDetailPage() {
     queryClient.invalidateQueries({ queryKey: ['dashboard-metrics'] });
   };
 
+  const [overrideReason, setOverrideReason] = useState('');
   const approveMutation = useMutation({
-    mutationFn: () => approveClaim(claimRef),
+    mutationFn: (reason?: string) => approveClaim(claimRef, reason),
     onSuccess: invalidateAll,
   });
   const rejectMutation = useMutation({
@@ -89,7 +94,12 @@ export function ClaimDetailPage() {
     );
   }
 
-  const shortfallDeviation = ((claim.memberShortfall - claim.expectedShortfall[1]) / claim.expectedShortfall[1] * 100);
+  // Mirrors the API: decided claims are final; approving over a dispute needs a reason.
+  const isDecided = FINAL_DECISIONS.includes(claim.decision);
+  const isDisputed = claim.memberResponse === 'DISPUTED';
+  const needsReason = isDisputed && overrideReason.trim().length < OVERRIDE_REASON_MIN;
+
+  const shortfallDeviation =((claim.memberShortfall - claim.expectedShortfall[1]) / claim.expectedShortfall[1] * 100);
 
   return (
     <AppShell title={`Claim ${claim.claimRef}`} subtitle={`NH263: ${claim.nh263Ref} · ${claim.member.name}`}>
@@ -262,13 +272,32 @@ export function ClaimDetailPage() {
                 <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg p-3">
                   Your role has read-only access. Claim decisions require an agent or admin role.
                 </p>
+              ) : isDecided ? (
+                <p className="text-xs text-gray-500 bg-gray-50 border border-gray-100 rounded-lg p-3">
+                  This claim has been decided. Decisions are final; see the timeline for who decided and why.
+                </p>
               ) : (
                 <div className="space-y-2">
+                  {isDisputed && canApprove && (
+                    <div>
+                      <label htmlFor="override-reason" className="block text-xs font-medium text-red-700 mb-1">
+                        The member disputed this claim. Why approve it anyway?
+                      </label>
+                      <textarea
+                        id="override-reason"
+                        className="form-input min-h-[64px] resize-y text-sm"
+                        placeholder="e.g. Member called back and confirmed a family member used the card"
+                        maxLength={1000}
+                        value={overrideReason}
+                        onChange={(e) => setOverrideReason(e.target.value)}
+                      />
+                    </div>
+                  )}
                   <button
                     className="btn-primary w-full justify-center"
                     aria-label="Approve claim"
-                    disabled={!canApprove || actionPending}
-                    onClick={() => approveMutation.mutate()}
+                    disabled={!canApprove || actionPending || needsReason}
+                    onClick={() => approveMutation.mutate(isDisputed ? overrideReason.trim() : undefined)}
                   >
                     {approveMutation.isPending ? (
                       <Loader2 size={15} className="animate-spin" />

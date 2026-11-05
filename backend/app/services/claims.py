@@ -15,6 +15,7 @@ from app.modules.fraudshield import ScoringContext, ScoringResult
 from app.modules.fraudshield.service import fraudshield_service
 from app.modules.fraudshield.signals import SignalInputs, derive_input_signals
 from app.repositories.claim import ClaimRepository
+from app.repositories.investigation import InvestigationRepository
 from app.repositories.member import MemberRepository
 from app.repositories.provider import ProviderRepository
 from app.schemas.claim import ClaimIngest, claim_to_detail, claim_to_summary
@@ -34,9 +35,17 @@ log = get_logger(__name__)
 _MEMBER_CHANNELS = ("WHATSAPP", "SMS", "USSD")
 _MEMBER_RESPONSES = {"CONFIRMED", "DISPUTED"}
 
-# Decided claims can't be sent back to the provider for more information.
+# Decided claims are final: they can't be re-decided, rescored, or sent back to
+# the provider for more information.
 _FINAL_DECISIONS = {"APPROVE", "REJECT_FRAUD", "REJECT_ERROR"}
 INFO_REQUESTED = "Information requested"
+
+# Investigation statuses that close a case (shared with the investigation service).
+CASE_TERMINAL = {"RESOLVED", "CLOSED"}
+
+# Approving over a member's dispute needs a written reason at least this long.
+_OVERRIDE_REASON_MIN = 10
+MEMBER_DISPUTED = "MEMBER_DISPUTED"
 
 
 def compose_rating_prompt(claim: Claim) -> str:
@@ -146,37 +155,67 @@ class ClaimService:
             )
         )
 
-    async def approve(self, claim_ref: str, actor: str) -> dict:
+    @staticmethod
+    def _ensure_undecided(claim: Claim) -> None:
+        if claim.decision in _FINAL_DECISIONS:
+            raise BusinessRuleError(
+                f"Claim is already decided ({claim.decision}); a decision is final"
+            )
+
+    async def _has_open_case(self, claim: Claim) -> bool:
+        inv = await InvestigationRepository(self.session).get_by_claim(claim.id)
+        return inv is not None and inv.status not in CASE_TERMINAL
+
+    async def approve(self, claim_ref: str, actor: str, reason: str | None = None) -> dict:
         claim = await self.repo.get_by_ref(claim_ref)
         if not claim:
             raise NotFoundError(f"Claim {claim_ref} not found")
-        if claim.decision == "APPROVE":
-            raise BusinessRuleError("Claim is already approved")
+        self._ensure_undecided(claim)
+        if claim.decision == "INFO_NEEDED":
+            raise BusinessRuleError(
+                "Waiting on the provider: wait for their answer or reject the claim"
+            )
+        if await self._has_open_case(claim):
+            raise BusinessRuleError("Close the open investigation before approving")
+        reason = (reason or "").strip()
+        if claim.member_response == "DISPUTED" and len(reason) < _OVERRIDE_REASON_MIN:
+            raise BusinessRuleError(
+                "The member disputed this claim. Give a reason to approve it anyway"
+            )
 
         claim.decision = "APPROVE"
         claim.approved_amount = claim.claimed_amount
         claim.updated_by = actor
-        await self._add_timeline(
-            claim, "Claim approved", f"Approved by {actor}", actor
-        )
+        detail = f"Approved by {actor}"
+        if claim.member_response == "DISPUTED":
+            detail += f", overriding the member's dispute: {reason}"
+        elif reason:
+            detail += f": {reason}"
+        await self._add_timeline(claim, "Claim approved", detail, actor)
         await self.session.flush()
 
         publish(WSEventType.QUEUE_UPDATED, {"claimRef": claim_ref, "decision": "APPROVE"})
         publish(WSEventType.DASHBOARD_UPDATED, {"reason": "claim_approved"})
         return claim_to_detail(claim)
 
-    async def reject(self, claim_ref: str, reason: str, actor: str) -> dict:
+    async def reject(
+        self, claim_ref: str, reason: str, actor: str, note: str | None = None
+    ) -> dict:
         if reason not in _REJECT_REASONS:
             raise BusinessRuleError(f"Invalid rejection reason: {reason}")
         claim = await self.repo.get_by_ref(claim_ref)
         if not claim:
             raise NotFoundError(f"Claim {claim_ref} not found")
+        self._ensure_undecided(claim)
 
         claim.decision = reason
         claim.approved_amount = 0
         claim.updated_by = actor
         await self._add_timeline(
-            claim, "Claim rejected", f"Rejected ({reason}) by {actor}", actor
+            claim,
+            "Claim rejected",
+            f"Rejected ({reason}) by {actor}" + (f": {note}" if note else ""),
+            actor,
         )
         await self.session.flush()
 
@@ -284,6 +323,11 @@ class ClaimService:
         claim = await self.repo.get_by_ref(claim_ref)
         if not claim:
             raise NotFoundError(f"Claim {claim_ref} not found")
+        # Re-alerting resets the member's answer, so it must never erase a dispute.
+        if claim.member_response == "DISPUTED":
+            raise BusinessRuleError(
+                "The member has disputed this claim; resolve it through an investigation"
+            )
 
         # Requested channel first, then the rest of the fallback chain.
         delivered = False
@@ -364,20 +408,27 @@ class ClaimService:
             raise NotFoundError(f"Claim {claim_ref} not found")
         if not claim.member_notification_sent:
             raise BusinessRuleError("No verification alert has been sent for this claim")
+        # A dispute stands; a confirmation can still become a dispute (the member
+        # calls back), but nothing turns a dispute back into a confirmation.
+        if claim.member_response == "DISPUTED":
+            raise BusinessRuleError("The member has already disputed this claim")
+        if claim.member_response == response:
+            raise BusinessRuleError(f"The member has already {response.lower()} this claim")
 
         claim.member_response = response
         if response == "DISPUTED":
             # The member says they never received the service — strongest possible
             # fraud signal: escalate to the top of the queue and flag it.
             claim.priority = "CRITICAL"
-            claim.flags.append(
-                ClaimFlag(
-                    claim_id=claim.id,
-                    code="MEMBER_DISPUTED",
-                    severity="CRITICAL",
-                    detail="Member reported they did not receive this service",
+            if not any(f.code == MEMBER_DISPUTED for f in claim.flags):
+                claim.flags.append(
+                    ClaimFlag(
+                        claim_id=claim.id,
+                        code=MEMBER_DISPUTED,
+                        severity="CRITICAL",
+                        detail="Member reported they did not receive this service",
+                    )
                 )
-            )
 
         verb = "confirmed" if response == "CONFIRMED" else "disputed"
         via = claim.member_notification_channel or "alert"
@@ -533,15 +584,19 @@ class ClaimService:
         )
 
     def _apply_result(self, claim: Claim, result: ScoringResult) -> None:
+        # Evidence from people (a member's dispute) outlives any re-run of the model.
+        disputed = [f for f in claim.flags if f.code == MEMBER_DISPUTED]
         claim.risk_score = result.risk_score
         claim.risk_level = result.risk_level
         claim.decision = result.decision
-        claim.priority = result.priority
+        claim.priority = "CRITICAL" if disputed else result.priority
         claim.ai_explanation = result.explanation
         claim.latency_ms = result.latency_ms
         claim.flags = [
             ClaimFlag(code=f.code, severity=f.severity, detail=f.detail)
             for f in result.flags
+        ] + [
+            ClaimFlag(code=f.code, severity=f.severity, detail=f.detail) for f in disputed
         ]
         claim.shap_contributions = [
             ShapContribution(
@@ -554,12 +609,25 @@ class ClaimService:
         claim = await self.repo.get_by_ref(claim_ref)
         if not claim:
             raise NotFoundError(f"Claim {claim_ref} not found")
+        # Rescoring sets the decision, so it must not overwrite a person's decision
+        # or pull a claim out from under a pending provider request.
+        self._ensure_undecided(claim)
+        if claim.decision == "INFO_NEEDED":
+            raise BusinessRuleError("Waiting on the provider; rescore after they answer")
+        previous = claim.decision
         result = fraudshield_service.score(self.context_from_claim(claim))
         self._apply_result(claim, result)
+        # A low score must not approve a claim that a person still has to clear.
+        held = claim.decision == "APPROVE" and (
+            claim.member_response == "DISPUTED" or await self._has_open_case(claim)
+        )
+        if held:
+            claim.decision = previous
         await self._add_timeline(
             claim,
             "FraudShield rescored",
-            f"Risk {result.risk_score} → {result.decision}",
+            f"Risk {result.risk_score} → {result.decision}"
+            + (f" (held at {previous} pending review)" if held else ""),
             actor,
             type_="system",
         )
@@ -569,7 +637,7 @@ class ClaimService:
             "claimRef": claim.claim_ref,
             "member": claim.member.name if claim.member else "Member",
             "riskScore": result.risk_score,
-            "decision": result.decision,
+            "decision": claim.decision,
             "latencyMs": result.latency_ms,
         }
         publish(WSEventType.CLAIM_SCORED, scored_payload)

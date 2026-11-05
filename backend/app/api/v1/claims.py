@@ -22,8 +22,14 @@ from app.services.claims import ClaimService
 router = APIRouter(prefix="/claims", tags=["claims"])
 
 
+class ApprovePayload(BaseModel):
+    # Required (by the service) when approving over a member's dispute.
+    reason: str | None = Field(None, max_length=1000)
+
+
 class RejectPayload(BaseModel):
     reason: str = "REJECT_FRAUD"
+    note: str | None = Field(None, max_length=1000)
 
 
 class NotePayload(BaseModel):
@@ -106,9 +112,14 @@ async def get_claim(
     dependencies=[Depends(require_permission("claim:approve"))],
     summary="Approve a claim")
 async def approve(
-    claim_ref: str, db: DbSession, user: CurrentUserDep, request: Request
+    claim_ref: str,
+    db: DbSession,
+    user: CurrentUserDep,
+    request: Request,
+    payload: ApprovePayload | None = None,
 ) -> dict:
-    data = await ClaimService(db).approve(claim_ref, actor=user.id)
+    reason = payload.reason if payload else None
+    data = await ClaimService(db).approve(claim_ref, actor=user.id, reason=reason)
     await AuditService(db).record(
         action="claim.approve",
         entity_type="claim",
@@ -116,6 +127,7 @@ async def approve(
         actor_id=user.id,
         request_id=getattr(request.state, "request_id", None),
         ip_address=client_ip(request),
+        changes={"reason": reason.strip()} if reason and reason.strip() else None,
     )
     return success(data, "Claim approved")
 
@@ -131,7 +143,8 @@ async def reject(
     user: CurrentUserDep,
     request: Request,
 ) -> dict:
-    data = await ClaimService(db).reject(claim_ref, payload.reason, actor=user.id)
+    note = (payload.note or "").strip() or None
+    data = await ClaimService(db).reject(claim_ref, payload.reason, actor=user.id, note=note)
     await AuditService(db).record(
         action="claim.reject",
         entity_type="claim",
@@ -139,7 +152,7 @@ async def reject(
         actor_id=user.id,
         request_id=getattr(request.state, "request_id", None),
         ip_address=client_ip(request),
-        changes={"reason": payload.reason},
+        changes={"reason": payload.reason, **({"note": note} if note else {})},
     )
     return success(data, "Claim rejected")
 

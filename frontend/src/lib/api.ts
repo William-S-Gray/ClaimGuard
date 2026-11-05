@@ -387,8 +387,12 @@ export async function fetchClaimByRef(claimRef: string): Promise<Claim | null> {
   return api.get<Claim | null>(`/claims/${encodeURIComponent(claimRef)}`, { nullOn404: true });
 }
 
-export async function approveClaim(claimRef: string): Promise<Claim> {
-  return api.post<Claim>(`/claims/${encodeURIComponent(claimRef)}/approve`);
+/** `reason` is required by the API when approving over a member's dispute. */
+export async function approveClaim(claimRef: string, reason?: string): Promise<Claim> {
+  return api.post<Claim>(
+    `/claims/${encodeURIComponent(claimRef)}/approve`,
+    reason ? { reason } : undefined,
+  );
 }
 
 export async function rejectClaim(

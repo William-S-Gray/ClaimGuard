@@ -8,6 +8,7 @@ import asyncio
 from typing import Any
 
 from app.core.database import SessionFactory
+from app.core.exceptions import BusinessRuleError
 from app.core.logging import get_logger
 from app.services.claims import ClaimService
 from app.services.notifications import NotificationService
@@ -31,6 +32,10 @@ def score_claim(self, claim_ref: str) -> dict:  # noqa: ANN001
 
     try:
         return run_async(_work())
+    except BusinessRuleError as exc:
+        # Decided or waiting on the provider: not rescoreable, and retrying won't change that.
+        log.info("task.score_claim.skipped", claim_ref=claim_ref, reason=str(exc))
+        return {"claimRef": claim_ref, "skipped": str(exc)}
     except Exception as exc:  # noqa: BLE001
         log.error("task.score_claim.failed", claim_ref=claim_ref, error=str(exc))
         raise self.retry(exc=exc, countdown=10) from exc

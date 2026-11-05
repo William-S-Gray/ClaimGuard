@@ -77,3 +77,29 @@ async def auditor_headers(client: AsyncClient) -> dict[str, str]:
     """A seeded auditor — audit-trail read access without admin rights."""
     token = await _login(client, "tapiwa.sithole@claimguard.co.zw")
     return {"Authorization": f"Bearer {token}"}
+
+
+async def ingest_claim(
+    client: AsyncClient, headers: dict, member: str = "CIM-0882341", *, risky: bool = False
+) -> str:
+    """A brand-new claim for `member`, so a test never inherits another test's state."""
+    import uuid
+
+    amount = 400 if risky else 30
+    payload = {
+        "claimRef": f"CG-T{uuid.uuid4().hex[:8].upper()}",
+        "memberNumber": member,
+        "providerCode": "PROV-BYO-00441",
+        "serviceDate": "2026-11-01",
+        "claimedAmount": amount,
+        "memberShortfall": 150 if risky else 5,
+        "expectedShortfallMin": 10 if risky else 0,
+        "expectedShortfallMax": 20 if risky else 10,
+        "hasBiometric": not risky,
+        "syndicateSignal": risky,
+        "items": [{"description": "Consultation", "quantity": 1,
+                   "unitPrice": amount, "total": amount}],
+    }
+    resp = await client.post("/api/v1/claims/ingest", headers=headers, json=payload)
+    assert resp.status_code == 200, resp.text
+    return resp.json()["data"]["claimRef"]
