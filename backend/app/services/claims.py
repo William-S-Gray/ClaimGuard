@@ -12,6 +12,7 @@ from app.core.logging import get_logger
 from app.core.websocket import WSEventType, publish
 from app.models.claim import Claim, ClaimFlag, ClaimItem, ShapContribution, TimelineEvent
 from app.modules.fraudshield import ScoringContext, ScoringResult
+from app.modules.fraudshield.rule_engine import HIGH_VALUE_THRESHOLD
 from app.modules.fraudshield.service import fraudshield_service
 from app.modules.fraudshield.signals import SignalInputs, derive_input_signals
 from app.repositories.claim import ClaimRepository
@@ -25,6 +26,7 @@ from app.services.providers import ProviderService
 # Hours until an un-actioned claim auto-approves / breaches SLA.
 _AUTO_APPROVE_HOURS = 72
 _SLA_HOURS = 48
+_HISTORY_DAYS = 7  # how far back duplicate/splitting/frequency checks look
 
 _REJECT_REASONS = {"REJECT_FRAUD", "REJECT_ERROR"}
 
@@ -531,7 +533,7 @@ class ClaimService:
         claim = await self.repo.get_by_ref(claim.claim_ref) or claim
 
         # Score on arrival using the freshly-derived signals.
-        result = fraudshield_service.score(self.context_from_claim(claim))
+        result = fraudshield_service.score(await self.scoring_context(claim))
         self._apply_result(claim, result)
         claim.auto_approve_at = (
             now + timedelta(hours=_AUTO_APPROVE_HOURS) if result.decision == "APPROVE" else None
@@ -581,7 +583,63 @@ class ClaimService:
             has_biometric=claim.has_biometric,
             chronic_drug_no_condition=claim.chronic_drug_no_condition,
             syndicate_signal=claim.syndicate_signal,
+            items_total=sum(float(i.total) for i in claim.items) if claim.items else None,
         )
+
+    async def scoring_context(self, claim: Claim) -> ScoringContext:
+        """The claim's own signals plus what the member's other claims say about it."""
+        ctx = self.context_from_claim(claim)
+        history = await self.repo.member_history(claim, days=_HISTORY_DAYS)
+        # A claim rejected as a data error is meant to be corrected and re-sent:
+        # its corrected copy is not a duplicate, and its amount never counted.
+        history = [c for c in history if c.decision != "REJECT_ERROR"]
+
+        def _at(c: Claim) -> datetime:
+            t = c.submitted_at or datetime.now(UTC)
+            return t if t.tzinfo else t.replace(tzinfo=UTC)
+
+        me = _at(claim)
+        # Only an *earlier* claim makes this one a duplicate, so the original
+        # isn't flagged when it is rescored later.
+        earlier = [c for c in history if (_at(c), c.claim_ref) < (me, claim.claim_ref)]
+        amount = float(claim.claimed_amount)
+        dup = next(
+            (
+                c for c in earlier
+                if (claim.nh263_ref and c.nh263_ref == claim.nh263_ref)
+                or (
+                    c.member_id == claim.member_id
+                    and c.provider_id == claim.provider_id
+                    and claim.service_date
+                    and c.service_date == claim.service_date
+                    and abs(float(c.claimed_amount) - amount) < 0.01
+                )
+            ),
+            None,
+        )
+        ctx.duplicate_of = dup.claim_ref if dup else None
+
+        same_visit = [
+            c for c in history
+            if c.member_id == claim.member_id
+            and c.provider_id == claim.provider_id
+            and claim.service_date
+            and c.service_date == claim.service_date
+        ]
+        parts = [float(c.claimed_amount) for c in same_visit]
+        ctx.split_suspected = (
+            bool(parts)
+            and amount < HIGH_VALUE_THRESHOLD
+            and all(p < HIGH_VALUE_THRESHOLD for p in parts)
+            and amount + sum(parts) >= HIGH_VALUE_THRESHOLD
+        )
+
+        week = timedelta(days=_HISTORY_DAYS)
+        ctx.member_claims_7d = sum(
+            1 for c in history
+            if c.member_id == claim.member_id and me - week <= _at(c) <= me
+        )
+        return ctx
 
     def _apply_result(self, claim: Claim, result: ScoringResult) -> None:
         # Evidence from people (a member's dispute) outlives any re-run of the model.
@@ -615,7 +673,7 @@ class ClaimService:
         if claim.decision == "INFO_NEEDED":
             raise BusinessRuleError("Waiting on the provider; rescore after they answer")
         previous = claim.decision
-        result = fraudshield_service.score(self.context_from_claim(claim))
+        result = fraudshield_service.score(await self.scoring_context(claim))
         self._apply_result(claim, result)
         # A low score must not approve a claim that a person still has to clear.
         held = claim.decision == "APPROVE" and (

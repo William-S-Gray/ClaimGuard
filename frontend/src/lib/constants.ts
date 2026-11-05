@@ -9,6 +9,12 @@ export const FLAG_LABELS: Record<FlagCode, string> = {
   SHORTFALL_INFLATION_SUSPECTED: 'Shortfall inflated',
   STATISTICAL_ANOMALY_DETECTED: 'Statistical anomaly',
   POTENTIAL_FRAUD_SYNDICATE_DETECTED: 'Syndicate signal',
+  MEMBER_DISPUTED: 'Member disputed',
+  RECOVERY_REQUIRED: 'Recover payment',
+  DUPLICATE_CLAIM: 'Duplicate',
+  CLAIM_SPLITTING_SUSPECTED: 'Split claim',
+  HIGH_CLAIM_FREQUENCY: 'Frequent claims',
+  ITEMS_DO_NOT_MATCH_TOTAL: 'Items ≠ total',
 };
 
 export const FLAG_DESCRIPTIONS: Record<FlagCode, string> = {
@@ -18,6 +24,12 @@ export const FLAG_DESCRIPTIONS: Record<FlagCode, string> = {
   SHORTFALL_INFLATION_SUSPECTED: 'Member shortfall significantly exceeds the expected range for this service type and provider.',
   STATISTICAL_ANOMALY_DETECTED: 'Claim metrics fall outside expected statistical norms for this provider and service combination.',
   POTENTIAL_FRAUD_SYNDICATE_DETECTED: 'Pattern matching detected — multiple members at this provider showing similar suspicious behavior.',
+  MEMBER_DISPUTED: 'The member said they did not receive this service.',
+  RECOVERY_REQUIRED: 'An investigation confirmed fraud on a claim that was already paid: the payment has to be recovered.',
+  DUPLICATE_CLAIM: 'Same member, provider, service date and amount as an earlier claim: possible double billing.',
+  CLAIM_SPLITTING_SUSPECTED: 'Several same-day claims at this provider each stay under the high-value line but together cross it.',
+  HIGH_CLAIM_FREQUENCY: 'This member has an unusual number of claims in the past week.',
+  ITEMS_DO_NOT_MATCH_TOTAL: 'The claimed amount differs from the sum of the claim\'s line items.',
 };
 
 // ─── Risk Level ───────────────────────────────────────────────────────────────

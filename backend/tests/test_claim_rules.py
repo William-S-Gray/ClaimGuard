@@ -10,6 +10,7 @@ from sqlalchemy import update
 
 from app.core.database import SessionFactory
 from app.models.claim import Claim
+from app.modules.fraudshield.decision_engine import DecisionEngine
 from tests.conftest import _login, ingest_claim
 
 CLAIMS = "/api/v1/claims"
@@ -147,9 +148,12 @@ async def test_rescore_keeps_the_dispute(client: AsyncClient, auth_headers: dict
 
 
 async def test_low_score_does_not_approve_a_disputed_claim(
-    client: AsyncClient, auth_headers: dict
+    client: AsyncClient, auth_headers: dict, monkeypatch
 ):
-    ref = await _disputed(client, auth_headers, risky=False)  # scores APPROVE on its own
+    ref = await _disputed(client, auth_headers, risky=False)
+    # Whatever the model makes of it (provider risk drifts as other tests run),
+    # the case under test is the model saying APPROVE.
+    monkeypatch.setattr(DecisionEngine, "decision", lambda self, score, flags=(): "APPROVE")
     resp = await client.post(f"{CLAIMS}/{ref}/rescore", headers=auth_headers)
     assert resp.status_code == 200, resp.text
     assert (await _claim(client, auth_headers, ref))["decision"] == "PEND_VERIFY"

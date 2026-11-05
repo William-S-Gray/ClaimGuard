@@ -83,14 +83,20 @@ async def ingest_claim(
     client: AsyncClient, headers: dict, member: str = "CIM-0882341", *, risky: bool = False
 ) -> str:
     """A brand-new claim for `member`, so a test never inherits another test's state."""
+    import random
     import uuid
+    from datetime import date, timedelta
 
-    amount = 400 if risky else 30
+    # A distinct date and amount each time, so test claims never look like
+    # duplicates or split pieces of one another (FraudShield checks for both).
+    rng = random.Random(uuid.uuid4().int)
+    amount = (400 if risky else 30) + rng.randint(1, 99) / 100
+    service_date = (date.today() - timedelta(days=rng.randint(30, 3000))).isoformat()
     payload = {
         "claimRef": f"CG-T{uuid.uuid4().hex[:8].upper()}",
         "memberNumber": member,
         "providerCode": "PROV-BYO-00441",
-        "serviceDate": "2026-11-01",
+        "serviceDate": service_date,
         "claimedAmount": amount,
         "memberShortfall": 150 if risky else 5,
         "expectedShortfallMin": 10 if risky else 0,

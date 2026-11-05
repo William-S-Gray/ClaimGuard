@@ -17,9 +17,14 @@ class DecisionEngine:
             return "MEDIUM"
         return "LOW"
 
-    def decision(self, score: int) -> str:
+    # Hard evidence a person must look at, however low the blended score is: rule
+    # points are only 60% of the score, so a duplicate on its own could otherwise
+    # land under APPROVE_BELOW and pay twice.
+    REVIEW_FLOOR_FLAGS = frozenset({"DUPLICATE_CLAIM", "CLAIM_SPLITTING_SUSPECTED"})
+
+    def decision(self, score: int, flag_codes: set[str] | frozenset[str] = frozenset()) -> str:
         if score < self.APPROVE_BELOW:
-            return "APPROVE"
+            return "PEND_VERIFY" if flag_codes & self.REVIEW_FLOOR_FLAGS else "APPROVE"
         if score < self.VERIFY_BELOW:
             return "PEND_VERIFY"
         return "PEND_INVESTIGATE"
