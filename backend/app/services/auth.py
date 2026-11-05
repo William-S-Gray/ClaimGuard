@@ -65,35 +65,43 @@ class AuthService:
         ).model_dump(by_alias=True)
 
     @staticmethod
-    def _lock_key(email: str, ip: str) -> str:
-        return f"authlock:{email.lower()}:{ip}"
+    def _lock_keys(email: str, ip: str) -> list[tuple[str, int]]:
+        """(counter key, failure limit): per account+IP, and per account overall."""
+        email = email.lower()
+        return [
+            (f"authlock:{email}:{ip}", settings.auth_max_failures),
+            (f"authlock:{email}", settings.auth_max_failures_per_account),
+        ]
 
     async def login(self, email: str, password: str, ip: str = "unknown") -> dict:
-        key = self._lock_key(email, ip)
-        try:
-            fails = int(await redis_client.client.get(key) or 0)
-        except Exception:
-            fails = 0
-        if fails >= settings.auth_max_failures:
-            raise RateLimitError(
-                "Too many failed sign-in attempts. Please try again later."
-            )
+        keys = self._lock_keys(email, ip)
+        for key, limit in keys:
+            try:
+                fails = int(await redis_client.client.get(key) or 0)
+            except Exception:
+                fails = 0
+            if fails >= limit:
+                raise RateLimitError(
+                    "Too many failed sign-in attempts. Please try again later."
+                )
 
         try:
             user = await self.authenticate(email, password)
         except AuthenticationError:
             # Count the failure and (re)set the lockout window.
-            try:
-                count = await redis_client.client.incr(key)
-                if count == 1:
-                    await redis_client.client.expire(key, settings.auth_lockout_seconds)
-            except Exception:
-                pass
+            for key, _ in keys:
+                try:
+                    count = await redis_client.client.incr(key)
+                    if count == 1:
+                        await redis_client.client.expire(key, settings.auth_lockout_seconds)
+                except Exception:
+                    pass
             raise
 
-        # Success — clear any failure counter.
-        with contextlib.suppress(Exception):
-            await redis_client.client.delete(key)
+        # Success — clear the failure counters.
+        for key, _ in keys:
+            with contextlib.suppress(Exception):
+                await redis_client.client.delete(key)
         user.last_login_at = datetime.now(UTC)
         await self.session.flush()
         return await self._issue_tokens(user)
@@ -106,7 +114,13 @@ class AuthService:
 
         jti = payload.get("jti")
         stored = await self.tokens.get_by_jti(jti) if jti else None
-        if not stored or stored.revoked:
+        if not stored:
+            raise AuthenticationError("Refresh token has been revoked")
+        if stored.revoked:
+            # Each refresh token is single-use. Seeing a spent one again means it
+            # was copied: end every session for this user so the copy is useless.
+            await self.tokens.revoke_all_for_user(stored.user_id)
+            await self.session.commit()  # the error below must not roll this back
             raise AuthenticationError("Refresh token has been revoked")
         if stored.expires_at.replace(tzinfo=UTC) < datetime.now(UTC):
             raise AuthenticationError("Refresh token has expired")
@@ -134,7 +148,7 @@ class AuthService:
     ) -> User:
         if await self.users.get_by_email(email.lower()):
             raise ConflictError("A user with that email already exists")
-        roles = await self.roles.get_many_by_name(role_names)
+        roles = await self._resolve_roles(role_names)  # unknown names are an error, not ignored
         user = User(
             email=email.lower(),
             full_name=full_name,

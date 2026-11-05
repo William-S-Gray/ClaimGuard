@@ -10,6 +10,7 @@ from fastapi import Depends, Query, Request
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.exceptions import AuthenticationError, PermissionDeniedError
 from app.core.security import decode_token
@@ -46,8 +47,29 @@ class CurrentUser:
         return self.is_superuser or bool(set(self.roles) & roles)
 
 
+async def load_current_user(session: AsyncSession, user_id: str) -> CurrentUser:
+    """The user as they are *now*, not as they were when the token was minted.
+
+    Roles and the active flag come from the database on every request, so a
+    deactivation or role change takes effect immediately instead of when the
+    access token happens to expire.
+    """
+    from app.repositories.user import UserRepository  # local: avoids an import cycle
+
+    user = await UserRepository(session).get(user_id)
+    if user is None or not user.is_active:
+        raise AuthenticationError("Account is disabled or no longer exists")
+    return CurrentUser(
+        id=str(user.id),
+        roles=user.role_names,
+        permissions=user.permission_codes,
+        provider_id=str(user.provider_id) if user.provider_id else None,
+    )
+
+
 async def get_current_user(
     credentials: Annotated[HTTPAuthorizationCredentials | None, Depends(bearer_scheme)],
+    session: DbSession,
 ) -> CurrentUser:
     if credentials is None:
         raise AuthenticationError("Missing bearer token")
@@ -57,13 +79,7 @@ async def get_current_user(
         raise AuthenticationError("Access token has expired") from exc
     except jwt.PyJWTError as exc:
         raise AuthenticationError("Invalid access token") from exc
-
-    return CurrentUser(
-        id=payload["sub"],
-        roles=payload.get("roles", []),
-        permissions=payload.get("perms", []),
-        provider_id=payload.get("prov"),
-    )
+    return await load_current_user(session, payload["sub"])
 
 
 CurrentUserDep = Annotated[CurrentUser, Depends(get_current_user)]
@@ -128,19 +144,22 @@ PaginationDep = Annotated[Pagination, Depends(pagination_params)]
 
 
 def client_ip(request: Request) -> str:
-    """Best-effort real client IP.
+    """The real client IP, read only from what a trusted proxy wrote.
 
-    Behind nginx the socket peer (`request.client.host`) is always the proxy, so
-    rate-limiting and brute-force lockout would collapse to a single bucket and
-    audit logs would record the proxy. nginx sets `X-Real-IP` to the true remote
-    address and appends to `X-Forwarded-For`; trust those (the proxy is the only
-    ingress). Falls back to the socket peer when there is no proxy.
+    Rate limiting, login lockout and the audit log key on this, so a value the
+    client can choose would let it dodge all three. Proxies *append* to
+    X-Forwarded-For and pass the client's own entries through, so the left-most
+    entry (and X-Real-IP, which Render doesn't overwrite) is attacker-controlled.
+    See `client_ip_header` / `forwarded_ip_hops` in settings.
     """
-    real_ip = request.headers.get("x-real-ip")
-    if real_ip:
-        return real_ip.strip()
+    if settings.client_ip_header:
+        value = request.headers.get(settings.client_ip_header, "").strip()
+        if value:
+            return value
+    hops = settings.forwarded_ip_hops
     forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
-        # Left-most entry is the original client.
-        return forwarded.split(",")[0].strip()
+    if hops and forwarded:
+        entries = [e.strip() for e in forwarded.split(",") if e.strip()]
+        if len(entries) >= hops:
+            return entries[-hops]
     return request.client.host if request.client else "unknown"

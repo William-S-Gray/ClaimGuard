@@ -24,6 +24,9 @@ class RealtimeClient {
   private handlers = new Map<WSEventType | '*', EventHandler[]>();
   private statusHandlers: StatusHandler[] = [];
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  // Set when the server closed us for policy (e.g. the token expired): the held
+  // token is no good, so mint a fresh one before reconnecting.
+  private needsFreshToken = false;
   private pingTimer: ReturnType<typeof setInterval> | null = null;
   private shouldReconnect = false;
   private connected = false;
@@ -43,7 +46,8 @@ class RealtimeClient {
   private async open(): Promise<void> {
     // The socket cannot send Authorization headers, so mint/refresh an access
     // token and pass it as a query param. Without one there is no session.
-    let token = getToken();
+    let token = this.needsFreshToken ? null : getToken();
+    this.needsFreshToken = false;
     if (!token) {
       const ok = await refreshAccessToken();
       token = ok ? getToken() : null;
@@ -80,7 +84,8 @@ class RealtimeClient {
       this.dispatch(event);
     };
 
-    socket.onclose = () => {
+    socket.onclose = (ev) => {
+      if (ev.code === 1008) this.needsFreshToken = true;
       this.cleanupSocket();
       this.setConnected(false);
       this.scheduleReconnect();

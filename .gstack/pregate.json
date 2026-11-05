@@ -6,6 +6,7 @@
     "backend/**": [
       "backend/tests/test_audit.py",
       "backend/tests/test_auth.py",
+      "backend/tests/test_auth_hardening.py",
       "backend/tests/test_claims.py",
       "backend/tests/test_dashboard.py",
       "backend/tests/test_demo_activity.py",
@@ -28,7 +29,10 @@
     "frontend/**": [],
     ".github/**": [],
     ".gitignore": [],
-    ".gstack/**": []
+    ".gstack/**": [],
+    "render.yaml": [
+      "backend/tests/test_security.py"
+    ]
   },
   "guards": [
     {
