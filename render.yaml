@@ -30,6 +30,10 @@ services:
         value: "true"
       - key: COOKIE_SAMESITE
         value: none
+      # Render runs behind Cloudflare and passes the client's own X-Forwarded-For
+      # through, so read the IP from the header Cloudflare overwrites instead.
+      - key: CLIENT_IP_HEADER
+        value: true-client-ip
       # First boot creates RBAC + the admin (from FIRST_ADMIN_*). Idempotent; you
       # may set this to "false" after the first successful deploy.
       - key: SEED_ON_STARTUP

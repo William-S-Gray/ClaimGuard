@@ -56,8 +56,21 @@ class Settings(BaseSettings):
     )
     rate_limit_per_minute: int = 120
 
+    # Which request header holds the real client IP. Forwarding headers are set by
+    # whoever sent the request, so only trust what *your* proxy writes:
+    # - CLIENT_IP_HEADER: a header the platform overwrites on every request
+    #   (Render/Cloudflare: "true-client-ip"). Takes precedence when set.
+    # - FORWARDED_IP_HOPS: otherwise, count this many entries from the right of
+    #   X-Forwarded-For (1 = the bundled nginx, which appends the peer address).
+    #   0 = no proxy: use the socket peer.
+    client_ip_header: str = ""
+    forwarded_ip_hops: int = Field(1, ge=0, le=5)
+
     # Auth brute-force protection (Redis-backed, per email+IP).
-    auth_max_failures: int = 8
+    auth_max_failures: int = 8  # per account + client IP
+    # Per account, whatever the IP: stops guessing spread across many addresses.
+    # Higher than the per-IP limit so one attacker can't trivially lock a user out.
+    auth_max_failures_per_account: int = 25
     auth_lockout_seconds: int = 900  # 15 minutes
 
     # Refresh-token cookie (httpOnly). Secure must be true behind TLS in prod.
@@ -154,6 +167,13 @@ class Settings(BaseSettings):
                 problems.append("DEBUG must be false in production")
             if any(o == "*" for o in self.cors_origins):
                 problems.append("CORS_ORIGINS must not be '*' in production")
+            if self.client_ip_header and self.client_ip_header.lower() in {
+                "x-forwarded-for", "x-real-ip"
+            }:
+                problems.append(
+                    "CLIENT_IP_HEADER must be a header your platform overwrites "
+                    "(e.g. true-client-ip); use FORWARDED_IP_HOPS for X-Forwarded-For"
+                )
 
             if not self.demo_mode:
                 if not self.cookie_secure:

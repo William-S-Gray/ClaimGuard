@@ -53,14 +53,21 @@ Both platforms serve HTTPS, so `Secure` cookies work out of the box.
    COOKIE_SAMESITE=none
    SEED_ON_STARTUP=true
    WEB_CONCURRENCY=1
+   CLIENT_IP_HEADER=true-client-ip
    JWT_SECRET_KEY=<openssl rand -hex 32>
    DATABASE_URL=<Neon direct URL with ?ssl=require>
    FIRST_ADMIN_EMAIL=<your admin email>
    FIRST_ADMIN_PASSWORD=<strong password — NOT the demo default>
    ```
    - **`WEB_CONCURRENCY=1`** — Free has 512 MB RAM; 2 gunicorn workers risk OOM.
+   - **`CLIENT_IP_HEADER=true-client-ip`** — the client IP behind rate limiting, login
+     lockout and the audit log. Render passes the client's own `X-Forwarded-For`
+     through, so that header can be forged; Cloudflare (in front of Render) overwrites
+     `True-Client-IP`. Without it the app counts from the right of `X-Forwarded-For`
+     (`FORWARDED_IP_HOPS`, default 1), which suits the bundled nginx but not Render.
    - **Do not set `PORT`** — Render injects it; the container binds `$PORT`.
-   - **`CORS_ORIGINS`** — add after the frontend deploy (step 3).
+   - **`CORS_ORIGINS`** — add after the frontend deploy (step 3). Until then the API
+     accepts no cross-site requests (blank never means "any origin").
    - **`JWT_SECRET_KEY`** — generate with `openssl rand -hex 32` (or
      `python3 -c "import secrets; print(secrets.token_hex(32))"`). Keep it secret; don't
      rotate it later or all live sessions are invalidated.

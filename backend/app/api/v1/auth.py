@@ -13,6 +13,7 @@ from app.core.dependencies import (
     client_ip,
     require_roles,
 )
+from app.core.exceptions import AuthenticationError, RateLimitError
 from app.core.responses import success
 from app.repositories.user import UserRepository
 from app.schemas.auth import (
@@ -76,7 +77,21 @@ async def login(
     payload: LoginRequest, request: Request, response: Response, db: DbSession
 ) -> dict:
     service = AuthService(db)
-    tokens = await service.login(payload.email, payload.password, ip=client_ip(request))
+    try:
+        tokens = await service.login(payload.email, payload.password, ip=client_ip(request))
+    except (AuthenticationError, RateLimitError) as exc:
+        # Failed and locked-out attempts are what an audit trail is for. Commit
+        # now: the error response rolls the request's session back.
+        await AuditService(db).record(
+            action="auth.login_failed",
+            entity_type="user",
+            actor_email=payload.email.lower(),
+            request_id=getattr(request.state, "request_id", None),
+            ip_address=client_ip(request),
+            changes={"reason": "locked_out" if isinstance(exc, RateLimitError) else "invalid"},
+        )
+        await db.commit()
+        raise
     _set_refresh_cookie(response, tokens["refreshToken"])
     await AuditService(db).record(
         action="auth.login",
@@ -131,17 +146,24 @@ async def me(user: CurrentUserDep, db: DbSession) -> dict:
     return success(out.model_dump(by_alias=True), "OK")
 
 
-@router.post(
-    "/users",
-    summary="Create a user (admin only)",
-    dependencies=[Depends(require_roles("admin"))],
-)
-async def create_user(payload: UserCreate, db: DbSession) -> dict:
+@router.post("/users", summary="Create a user (admin only)")
+async def create_user(
+    payload: UserCreate, admin: AdminDep, db: DbSession, request: Request
+) -> dict:
     user = await AuthService(db).create_user(
         email=payload.email,
         full_name=payload.full_name,
         password=payload.password,
         role_names=payload.roles,
+    )
+    await AuditService(db).record(
+        action="user.create",
+        entity_type="user",
+        entity_id=str(user.id),
+        actor_id=admin.id,
+        request_id=getattr(request.state, "request_id", None),
+        ip_address=client_ip(request),
+        changes={"email": user.email, "roles": payload.roles},
     )
     return success({"id": str(user.id), "email": user.email}, "User created")
 
