@@ -16,6 +16,7 @@ from app.repositories.investigation import (
 from app.repositories.user import UserRepository
 from app.schemas.investigation import CommentOut, InvestigationOut
 from app.services.claims import CASE_TERMINAL as _TERMINAL
+from app.services.claims import is_on_hold
 from app.services.notifications import NotificationService
 
 # Kept in step with the frontend's CASE_STATUSES / CASE_RESOLUTIONS.
@@ -115,6 +116,16 @@ class InvestigationService:
         self._check_values({"priority": priority or None})
         if assigned_to:
             await self._check_assignee(assigned_to)
+        # An investigation stops a model approval that hasn't been paid yet.
+        if is_on_hold(claim):
+            claim.decision = "PEND_INVESTIGATE"
+            claim.auto_approve_at = None
+            claim.approved_amount = None
+            claim.timeline.append(TimelineEvent(
+                claim_id=claim.id, timestamp=datetime.now(UTC), event="Payment stopped",
+                description="Model approval withdrawn before payment: investigation opened",
+                actor=actor, type="system",
+            ))
         inv = await self.repo.create(
             claim_id=claim.id,
             assigned_to=assigned_to,

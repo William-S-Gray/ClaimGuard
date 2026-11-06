@@ -21,6 +21,7 @@
       "backend/tests/test_investigator_dashboard.py",
       "backend/tests/test_member_alerts.py",
       "backend/tests/test_notifications_delivery.py",
+      "backend/tests/test_payment_hold.py",
       "backend/tests/test_provider_portal.py",
       "backend/tests/test_rbac.py",
       "backend/tests/test_reads.py",

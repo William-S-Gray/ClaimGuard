@@ -6,7 +6,8 @@ process (Render's plan has no Celery worker or beat) and:
 
 - escalates open claims whose SLA has passed (flag + priority + timeline);
 - lapses verification alerts the member never answered (flag + timeline), so a
-  person follows up instead of the claim waiting forever.
+  person follows up instead of the claim waiting forever;
+- releases model approvals whose payment hold has run out (nothing stopped them).
 
 Every step is idempotent (it skips claims already flagged), so running it on
 several API workers at once, or twice in a row, changes nothing extra.
@@ -27,7 +28,8 @@ from app.core.logging import get_logger
 from app.core.redis import redis_client
 from app.core.websocket import WSEventType, publish
 from app.models.claim import Claim, ClaimFlag, TimelineEvent
-from app.services.claims import MEMBER_NO_REPLY, SLA_BREACHED, raise_priority
+from app.repositories.investigation import InvestigationRepository
+from app.services.claims import CASE_TERMINAL, MEMBER_NO_REPLY, SLA_BREACHED, raise_priority
 from app.services.notifications import NotificationService
 
 log = get_logger(__name__)
@@ -40,6 +42,7 @@ _BATCH = 500  # per step per run; the next run picks up the rest
 class SweepResult:
     sla_breached: int = 0
     alerts_lapsed: int = 0
+    payments_released: int = 0
 
 
 def _flag(claim: Claim, code: str, severity: str, detail: str, event: str, now: datetime) -> None:
@@ -83,6 +86,50 @@ async def _lapsed_alerts(session: AsyncSession, now: datetime) -> list[Claim]:
     return [c for c in rows if not any(f.code == MEMBER_NO_REPLY for f in c.flags)]
 
 
+async def _holds_ended(session: AsyncSession, now: datetime) -> list[Claim]:
+    stmt = (
+        select(Claim)
+        .where(
+            Claim.deleted_at.is_(None),
+            Claim.decision == "APPROVE",
+            Claim.auto_approve_at.is_not(None),
+            Claim.auto_approve_at <= now,
+        )
+        .order_by(Claim.auto_approve_at)
+        .limit(_BATCH)
+    )
+    return list((await session.execute(stmt)).scalars().unique().all())
+
+
+async def _release(session: AsyncSession, claim: Claim, now: datetime) -> bool:
+    """Pay a held approval, unless something should have stopped it.
+
+    Disputes and new cases withdraw the hold as they happen; this is the belt to
+    those braces, for a hold that predates them.
+    """
+    inv = await InvestigationRepository(session).get_by_claim(claim.id)
+    if claim.member_response == "DISPUTED" or (inv and inv.status not in CASE_TERMINAL):
+        claim.decision = "PEND_INVESTIGATE"
+        claim.auto_approve_at = None
+        claim.approved_amount = None
+        claim.timeline.append(TimelineEvent(
+            claim_id=claim.id, timestamp=now, event="Payment stopped",
+            description="Hold ended under a dispute or open case: sent for review",
+            actor="ClaimGuard", type="system",
+        ))
+        return False
+    unpaid = claim.approved_amount is None
+    claim.approved_amount = claim.claimed_amount
+    claim.auto_approve_at = None
+    if unpaid:
+        claim.timeline.append(TimelineEvent(
+            claim_id=claim.id, timestamp=now, event="Payment released",
+            description="Payment hold ended with no dispute: approval is final",
+            actor="ClaimGuard", type="system",
+        ))
+    return True
+
+
 async def sweep(session: AsyncSession, now: datetime | None = None) -> SweepResult:
     """One pass over both deadlines. The caller commits."""
     now = now or datetime.now(UTC)
@@ -100,6 +147,10 @@ async def sweep(session: AsyncSession, now: datetime | None = None) -> SweepResu
               f"Member did not answer the verification alert within {days} days; "
               "follow up by phone", "Member did not reply", now)
         result.alerts_lapsed += 1
+
+    for claim in await _holds_ended(session, now):
+        if await _release(session, claim, now):
+            result.payments_released += 1
 
     # One summary each, however many claims: the first sweep after a long sleep
     # can catch dozens at once, and nobody wants dozens of bell notifications.
@@ -119,10 +170,11 @@ async def sweep(session: AsyncSession, now: datetime | None = None) -> SweepResu
             message=f"{n} member{'s' if n != 1 else ''} did not reply in {days} days.",
         )
     await session.flush()
-    if result.sla_breached or result.alerts_lapsed:
+    if result.sla_breached or result.alerts_lapsed or result.payments_released:
         publish(WSEventType.QUEUE_UPDATED, {"reason": "sweep"})
         log.info("claim_sweep.done", sla_breached=result.sla_breached,
-                 alerts_lapsed=result.alerts_lapsed)
+                 alerts_lapsed=result.alerts_lapsed,
+                 payments_released=result.payments_released)
     return result
 
 

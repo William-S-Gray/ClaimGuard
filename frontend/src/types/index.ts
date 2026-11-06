@@ -110,7 +110,7 @@ export interface Claim {
   shapContributions: ShapContribution[];
   latencyMs: number;
   priority: Priority;
-  autoApproveAt?: string; // ISO string, only for PEND_VERIFY
+  autoApproveAt?: string; // ISO; set while a model approval is held before payment
   memberNotificationSent: boolean;
   memberNotificationChannel?: Channel;
   memberResponse: MemberResponseStatus;

@@ -23,8 +23,7 @@ from app.schemas.claim import ClaimIngest, claim_to_detail, claim_to_summary
 from app.services.notifications import CHANNELS, NotificationService
 from app.services.providers import ProviderService
 
-# Hours until an un-actioned claim auto-approves / breaches SLA.
-_AUTO_APPROVE_HOURS = 72
+# Hours until an un-actioned claim breaches SLA.
 _SLA_HOURS = 48
 _HISTORY_DAYS = 7  # how far back duplicate/splitting/frequency checks look
 
@@ -40,6 +39,21 @@ _MEMBER_RESPONSES = {"CONFIRMED", "DISPUTED"}
 # Decided claims are final: they can't be re-decided, rescored, or sent back to
 # the provider for more information.
 _FINAL_DECISIONS = {"APPROVE", "REJECT_FRAUD", "REJECT_ERROR"}
+
+
+def is_on_hold(claim: Claim) -> bool:
+    """Approved by the model but not yet paid: still stoppable (see payment_hold_hours)."""
+    return claim.decision == "APPROVE" and claim.auto_approve_at is not None
+
+
+def is_final(claim: Claim) -> bool:
+    return claim.decision in _FINAL_DECISIONS and not is_on_hold(claim)
+
+
+def hold_until(now: datetime) -> datetime | None:
+    """When a model approval made at `now` gets paid; None = no hold, pay at once."""
+    hours = settings.payment_hold_hours
+    return now + timedelta(hours=hours) if hours else None
 INFO_REQUESTED = "Information requested"
 
 # Investigation statuses that close a case (shared with the investigation service).
@@ -170,10 +184,22 @@ class ClaimService:
 
     @staticmethod
     def _ensure_undecided(claim: Claim) -> None:
-        if claim.decision in _FINAL_DECISIONS:
+        if is_final(claim):
             raise BusinessRuleError(
                 f"Claim is already decided ({claim.decision}); a decision is final"
             )
+
+    async def _withdraw_hold(self, claim: Claim, to: str, why: str, actor: str) -> None:
+        """Take back a model approval that hasn't been paid yet."""
+        if not is_on_hold(claim):
+            return
+        claim.decision = to
+        claim.auto_approve_at = None
+        claim.approved_amount = None
+        await self._add_timeline(
+            claim, "Payment stopped", f"Model approval withdrawn before payment: {why}",
+            actor, type_="system",
+        )
 
     async def _has_open_case(self, claim: Claim) -> bool:
         inv = await InvestigationRepository(self.session).get_by_claim(claim.id)
@@ -196,10 +222,12 @@ class ClaimService:
                 "The member disputed this claim. Give a reason to approve it anyway"
             )
 
+        early = is_on_hold(claim)
         claim.decision = "APPROVE"
         claim.approved_amount = claim.claimed_amount
+        claim.auto_approve_at = None  # a person approved it: pay now, no hold
         claim.updated_by = actor
-        detail = f"Approved by {actor}"
+        detail = f"{'Released for payment early' if early else 'Approved'} by {actor}"
         if claim.member_response == "DISPUTED":
             detail += f", overriding the member's dispute: {reason}"
         elif reason:
@@ -223,6 +251,7 @@ class ClaimService:
 
         claim.decision = reason
         claim.approved_amount = 0
+        claim.auto_approve_at = None
         claim.updated_by = actor
         await self._add_timeline(
             claim,
@@ -250,10 +279,11 @@ class ClaimService:
         claim = await self.repo.get_by_ref(claim_ref)
         if not claim:
             raise NotFoundError(f"Claim {claim_ref} not found")
-        if claim.decision in _FINAL_DECISIONS:
+        if is_final(claim):
             raise BusinessRuleError("Claim is already decided")
         if claim.decision == "INFO_NEEDED":
             raise BusinessRuleError("Already waiting on the provider")
+        await self._withdraw_hold(claim, "PEND_VERIFY", "information requested", actor)
 
         previous = claim.decision
         # Stop the SLA clock while the provider has the ball; keep what was left.
@@ -433,6 +463,9 @@ class ClaimService:
 
         claim.member_response = response
         if response == "DISPUTED":
+            await self._withdraw_hold(
+                claim, "PEND_INVESTIGATE", "the member disputed the claim", actor
+            )
             # The member says they never received the service — strongest possible
             # fraud signal: escalate to the top of the queue and flag it.
             claim.priority = "CRITICAL"
@@ -549,9 +582,8 @@ class ClaimService:
         # Score on arrival using the freshly-derived signals.
         result = fraudshield_service.score(await self.scoring_context(claim))
         self._apply_result(claim, result)
-        claim.auto_approve_at = (
-            now + timedelta(hours=_AUTO_APPROVE_HOURS) if result.decision == "APPROVE" else None
-        )
+        # A model approval is held before payment, so a member's "NO" can still stop it.
+        claim.auto_approve_at = hold_until(now) if result.decision == "APPROVE" else None
         claim.timeline.append(
             TimelineEvent(
                 timestamp=datetime.now(UTC),
@@ -699,6 +731,12 @@ class ClaimService:
         )
         if held:
             claim.decision = previous
+        # Payment hold follows the decision: a new model approval starts one, a
+        # repeat approval keeps the original clock, anything else cancels it.
+        if claim.decision != "APPROVE":
+            claim.auto_approve_at = None
+        elif previous != "APPROVE":
+            claim.auto_approve_at = hold_until(datetime.now(UTC))
         await self._add_timeline(
             claim,
             "FraudShield rescored",
