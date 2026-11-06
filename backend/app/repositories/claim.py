@@ -6,6 +6,8 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import Select, and_, func, or_, select
 
+from app.core.config import settings
+from app.core.phone import national_tail, normalize_phone
 from app.models.claim import Claim
 from app.models.investigation import Investigation
 from app.models.member import Member
@@ -76,41 +78,53 @@ class ClaimRepository(BaseRepository[Claim]):
         stmt = self._base_query().where(Claim.claim_ref == claim_ref)
         return (await self.session.execute(stmt)).scalar_one_or_none()
 
-    async def pending_alert_for_phone(self, phone: str) -> Claim | None:
-        """The most recently alerted claim still awaiting this member's reply.
+    async def _for_phone(self, phone: str, *conditions, order_by) -> list[Claim]:
+        """Claims whose member's number is `phone`, in any written form.
 
-        `phone` is E.164 without spaces; stored numbers may contain spaces.
+        A cheap SQL prefilter on the last nine digits (spaces and dashes removed),
+        then an exact comparison of the normalised numbers in Python.
         """
-        # ponytail: a reply always answers the latest open alert; if members get
-        # several alerts at once, put the claim ref in the message and match on it.
+        target = normalize_phone(phone)
+        if not target:
+            return []
+        stored = func.replace(func.replace(Member.phone, " ", ""), "-", "")
         stmt = (
             self._base_query()
             .join(Member, Claim.member_id == Member.id)
-            .where(
-                func.replace(Member.phone, " ", "") == phone,
-                Claim.member_notification_sent.is_(True),
-                Claim.member_response == "PENDING",
-            )
-            .order_by(Claim.updated_at.desc())
-            .limit(1)
+            .where(stored.like(f"%{national_tail(target)}"), *conditions)
+            .order_by(order_by)
+            .limit(50)
         )
-        return (await self.session.execute(stmt)).scalars().first()
+        rows = (await self.session.execute(stmt)).scalars().unique().all()
+        return [c for c in rows if normalize_phone(c.member.phone) == target]
+
+    async def pending_alert_for_phone(self, phone: str) -> Claim | None:
+        """The member's newest alert still waiting for a reply and not yet lapsed.
+
+        Ordered by when the alert was *sent*, not when the claim last changed: a
+        note on an older claim must not make a "YES" answer that one instead.
+        """
+        sent_at = func.coalesce(Claim.member_alert_sent_at, Claim.updated_at)
+        lapse = datetime.now(UTC) - timedelta(days=settings.member_alert_ttl_days)
+        rows = await self._for_phone(
+            phone,
+            Claim.member_notification_sent.is_(True),
+            Claim.member_response == "PENDING",
+            sent_at >= lapse,
+            order_by=sent_at.desc(),
+        )
+        return rows[0] if rows else None
 
     async def awaiting_rating_for_phone(self, phone: str) -> Claim | None:
         """The latest claim this member confirmed in the past week but hasn't rated."""
-        stmt = (
-            self._base_query()
-            .join(Member, Claim.member_id == Member.id)
-            .where(
-                func.replace(Member.phone, " ", "") == phone,
-                Claim.member_response == "CONFIRMED",
-                Claim.member_rating.is_(None),
-                Claim.updated_at >= datetime.now(UTC) - timedelta(days=7),
-            )
-            .order_by(Claim.updated_at.desc())
-            .limit(1)
+        rows = await self._for_phone(
+            phone,
+            Claim.member_response == "CONFIRMED",
+            Claim.member_rating.is_(None),
+            Claim.updated_at >= datetime.now(UTC) - timedelta(days=7),
+            order_by=Claim.updated_at.desc(),
         )
-        return (await self.session.execute(stmt)).scalars().first()
+        return rows[0] if rows else None
 
     async def rating_stats(self, provider_id: uuid.UUID | None = None) -> tuple[float | None, int]:
         """(average 1-5 member rating, number of ratings), optionally for one provider."""

@@ -15,6 +15,8 @@ export const FLAG_LABELS: Record<FlagCode, string> = {
   CLAIM_SPLITTING_SUSPECTED: 'Split claim',
   HIGH_CLAIM_FREQUENCY: 'Frequent claims',
   ITEMS_DO_NOT_MATCH_TOTAL: 'Items ≠ total',
+  SLA_BREACHED: 'SLA breached',
+  MEMBER_NO_REPLY: 'No member reply',
 };
 
 export const FLAG_DESCRIPTIONS: Record<FlagCode, string> = {
@@ -30,6 +32,8 @@ export const FLAG_DESCRIPTIONS: Record<FlagCode, string> = {
   CLAIM_SPLITTING_SUSPECTED: 'Several same-day claims at this provider each stay under the high-value line but together cross it.',
   HIGH_CLAIM_FREQUENCY: 'This member has an unusual number of claims in the past week.',
   ITEMS_DO_NOT_MATCH_TOTAL: 'The claimed amount differs from the sum of the claim\'s line items.',
+  SLA_BREACHED: 'The review deadline passed with no decision.',
+  MEMBER_NO_REPLY: 'The member did not answer the verification alert in time: follow up by phone.',
 };
 
 // ─── Risk Level ───────────────────────────────────────────────────────────────
