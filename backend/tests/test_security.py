@@ -135,3 +135,9 @@ def test_cors_never_falls_back_to_any_origin(monkeypatch):
         headers={"Origin": "https://evil.example", "Cookie": "cg_refresh=x"},
     )
     assert "access-control-allow-origin" not in resp.headers
+
+
+def test_demo_mode_is_off_unless_asked_for():
+    # A deploy that never sets DEMO_MODE must get the strict production checks.
+    # (Read the declared default: the test suite itself runs with DEMO_MODE=true.)
+    assert Settings.model_fields["demo_mode"].default is False

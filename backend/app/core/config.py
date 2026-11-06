@@ -98,7 +98,11 @@ class Settings(BaseSettings):
     ml_artifacts_dir: str = ""
 
     # ── Demo / seed ────────────────────────────────────────────────────────
-    demo_mode: bool = True
+    # Off unless asked for: demo mode loads sample data, mounts the scripted
+    # scenario router and relaxes the production checks (secure cookies, a
+    # changed admin password). A deploy that forgets to set it gets the safe
+    # side. docker-compose.yml and .env.example turn it on for the local demo.
+    demo_mode: bool = False
     seed_on_startup: bool = False
     first_admin_email: str = "admin@claimguard.co.zw"
     first_admin_password: str = "ChangeMe!2026"
