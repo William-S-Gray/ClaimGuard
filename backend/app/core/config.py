@@ -124,6 +124,13 @@ class Settings(BaseSettings):
     # one; until then this demo value is shown everywhere (API and UI read it here).
     ussd_code: str = "*483*360#"
 
+    # ── Claim lifecycle sweep (runs inside the API: Render has no Celery) ─────────
+    # Every N minutes: escalate breached SLAs, lapse unanswered member alerts.
+    # 0 turns it off. Each step is idempotent, so several API workers are safe.
+    claim_sweep_minutes: int = Field(15, ge=0, le=1440)
+    # Days a member has to answer a verification alert before it lapses.
+    member_alert_ttl_days: int = Field(7, ge=1, le=90)
+
     @property
     def email_configured(self) -> bool:
         return bool(self.smtp_host)

@@ -18,7 +18,9 @@ export type FlagCode =
   | 'DUPLICATE_CLAIM'
   | 'CLAIM_SPLITTING_SUSPECTED'
   | 'HIGH_CLAIM_FREQUENCY'
-  | 'ITEMS_DO_NOT_MATCH_TOTAL';
+  | 'ITEMS_DO_NOT_MATCH_TOTAL'
+  | 'SLA_BREACHED'
+  | 'MEMBER_NO_REPLY';
 
 // ─── Trust Score ─────────────────────────────────────────────────────────────
 

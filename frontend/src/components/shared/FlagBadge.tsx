@@ -21,6 +21,8 @@ const FLAG_COLORS: Record<FlagCode, string> = {
   CLAIM_SPLITTING_SUSPECTED: 'bg-orange-50 text-orange-700 border-orange-200',
   HIGH_CLAIM_FREQUENCY: 'bg-amber-50 text-amber-700 border-amber-200',
   ITEMS_DO_NOT_MATCH_TOTAL: 'bg-amber-50 text-amber-700 border-amber-200',
+  SLA_BREACHED: 'bg-orange-50 text-orange-700 border-orange-200',
+  MEMBER_NO_REPLY: 'bg-amber-50 text-amber-700 border-amber-200',
 };
 
 export function FlagBadge({ flag, className }: FlagBadgeProps) {

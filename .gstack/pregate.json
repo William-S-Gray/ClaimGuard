@@ -8,6 +8,7 @@
       "backend/tests/test_auth.py",
       "backend/tests/test_auth_hardening.py",
       "backend/tests/test_claim_rules.py",
+      "backend/tests/test_claim_sweep.py",
       "backend/tests/test_claims.py",
       "backend/tests/test_dashboard.py",
       "backend/tests/test_demo_activity.py",

@@ -93,7 +93,7 @@ async def test_member_whatsapp_reply_disputes_claim(
     assert claim["data"]["priority"] == "CRITICAL"
 
     audit = await client.get(
-        "/api/v1/audit?entity_type=claim&pageSize=200", headers=auth_headers
+        "/api/v1/audit?entity_type=claim&page_size=200", headers=auth_headers
     )
     actions = {
         e["action"] for e in audit.json()["data"] if e["entityId"] == ref

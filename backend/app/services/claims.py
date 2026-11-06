@@ -48,6 +48,17 @@ CASE_TERMINAL = {"RESOLVED", "CLOSED"}
 # Approving over a member's dispute needs a written reason at least this long.
 _OVERRIDE_REASON_MIN = 10
 MEMBER_DISPUTED = "MEMBER_DISPUTED"
+SLA_BREACHED = "SLA_BREACHED"
+MEMBER_NO_REPLY = "MEMBER_NO_REPLY"
+PERSISTENT_FLAGS = {MEMBER_DISPUTED, "RECOVERY_REQUIRED", SLA_BREACHED, MEMBER_NO_REPLY}
+
+_PRIORITY_ORDER = ["LOW", "MEDIUM", "HIGH", "CRITICAL"]
+
+
+def raise_priority(current: str | None, at_least: str) -> str:
+    """The higher of two priorities (never lowers one)."""
+    rank = {p: i for i, p in enumerate(_PRIORITY_ORDER)}
+    return max(current or "LOW", at_least, key=lambda p: rank.get(p, 0))
 
 
 def compose_rating_prompt(claim: Claim) -> str:
@@ -353,6 +364,9 @@ class ClaimService:
 
         claim.member_notification_sent = True
         claim.member_notification_channel = channel
+        claim.member_alert_sent_at = datetime.now(UTC)
+        # A fresh alert gets a fresh reply window.
+        claim.flags = [f for f in claim.flags if f.code != MEMBER_NO_REPLY]
         claim.member_response = "PENDING"
         claim.member_rating = None  # a re-check asks for a fresh rating
         claim.updated_by = actor
@@ -642,19 +656,23 @@ class ClaimService:
         return ctx
 
     def _apply_result(self, claim: Claim, result: ScoringResult) -> None:
-        # Evidence from people (a member's dispute) outlives any re-run of the model.
-        disputed = [f for f in claim.flags if f.code == MEMBER_DISPUTED]
+        # Flags raised by people or by the lifecycle (a member's dispute, a breached
+        # SLA) are facts about the claim, not model output: they outlive a rescore.
+        kept = [f for f in claim.flags if f.code in PERSISTENT_FLAGS]
+        disputed = any(f.code == MEMBER_DISPUTED for f in kept)
         claim.risk_score = result.risk_score
         claim.risk_level = result.risk_level
         claim.decision = result.decision
         claim.priority = "CRITICAL" if disputed else result.priority
+        if any(f.code == SLA_BREACHED for f in kept):
+            claim.priority = raise_priority(claim.priority, "HIGH")
         claim.ai_explanation = result.explanation
         claim.latency_ms = result.latency_ms
         claim.flags = [
             ClaimFlag(code=f.code, severity=f.severity, detail=f.detail)
             for f in result.flags
         ] + [
-            ClaimFlag(code=f.code, severity=f.severity, detail=f.detail) for f in disputed
+            ClaimFlag(code=f.code, severity=f.severity, detail=f.detail) for f in kept
         ]
         claim.shap_contributions = [
             ShapContribution(

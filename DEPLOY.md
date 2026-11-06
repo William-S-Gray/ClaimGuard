@@ -160,9 +160,15 @@ WebSocket calls.
 
 ## Notes / limitations for this setup
 
-- **No Celery workers** (per the chosen plan): scheduled/background tasks (e.g. periodic
-  rescoring) don't run. The API, realtime WebSocket, brute-force lockout, and rate limiting
+- **No Celery workers** (per the chosen plan): Celery tasks (e.g. the nightly TrustScore
+  recalculation) don't run. The API, realtime WebSocket, brute-force lockout, and rate limiting
   all work (Redis-backed).
+- **Claim lifecycle sweep runs inside the API instead**, every `CLAIM_SWEEP_MINUTES`
+  (default 15; `0` turns it off) and once on every boot. It escalates open claims past
+  their SLA (`SLA_BREACHED`, priority at least HIGH) and flags verification alerts with no
+  member reply after `MEMBER_ALERT_TTL_DAYS` (default 7; `MEMBER_NO_REPLY`), with one
+  summary notification per sweep. A Free instance sleeps when idle, so the sweep runs
+  when it wakes, not on a strict clock.
 - **Web concurrency**: the API runs under gunicorn with `WEB_CONCURRENCY` uvicorn workers
   (default 2). Realtime events fan out across workers via a Redis pub/sub backplane, so
   scaling workers/instances is safe. Raise `WEB_CONCURRENCY` for a bigger plan.

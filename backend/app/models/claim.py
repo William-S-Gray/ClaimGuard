@@ -60,6 +60,9 @@ class Claim(BaseEntity):
     # Member engagement
     member_notification_sent: Mapped[bool] = mapped_column(default=False)
     member_notification_channel: Mapped[str | None] = mapped_column(String(16))
+    # When the latest verification alert went out: replies match the newest open
+    # alert, and an alert with no reply within MEMBER_ALERT_TTL_DAYS lapses.
+    member_alert_sent_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     member_response: Mapped[str] = mapped_column(String(16), default="PENDING")
     # 1-5, asked after a member confirms they received the service.
     member_rating: Mapped[int | None] = mapped_column(Integer)
