@@ -1,6 +1,7 @@
 """FraudShield gaps: duplicates, claim splitting, frequency, and ingest validation."""
 from __future__ import annotations
 
+import itertools
 import uuid
 from datetime import date, timedelta
 
@@ -19,9 +20,16 @@ INGEST = "/api/v1/claims/ingest"
 MEMBER, PROVIDER = "CIM-0441209", "PROV-HRE-00098"
 
 
+_days = itertools.count(4000)  # far behind conftest's ingest_claim dates
+
+
 def _day() -> str:
-    """A service date no other test uses, so history checks only see this test."""
-    return (date.today() - timedelta(days=4000 + uuid.uuid4().int % 2000)).isoformat()
+    """A service date no other test uses, so history checks only see this test.
+
+    Counted, not random: two tests drawing the same random date made their
+    claims look like split pieces of one visit (a real, if rare, CI failure).
+    """
+    return (date.today() - timedelta(days=next(_days))).isoformat()
 
 
 def _payload(amount: float, service_date: str, **extra) -> dict:
