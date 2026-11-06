@@ -174,7 +174,7 @@ async def test_fraudshield_score_endpoint(client: AsyncClient, auth_headers: dic
     assert data["aiExplanation"]
 
     audit = await client.get(
-        "/api/v1/audit?entity_type=claim&pageSize=200", headers=auth_headers
+        "/api/v1/audit?entity_type=claim&page_size=200", headers=auth_headers
     )
     assert any(
         e["action"] == "fraudshield.score" and e["entityId"] == "TEST-1"
