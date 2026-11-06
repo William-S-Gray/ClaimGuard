@@ -15,6 +15,12 @@ const FLAG_COLORS: Record<FlagCode, string> = {
   SHORTFALL_INFLATION_SUSPECTED: 'bg-amber-50 text-amber-700 border-amber-200',
   STATISTICAL_ANOMALY_DETECTED: 'bg-purple-50 text-purple-700 border-purple-200',
   POTENTIAL_FRAUD_SYNDICATE_DETECTED: 'bg-red-100 text-red-800 border-red-300',
+  MEMBER_DISPUTED: 'bg-red-100 text-red-800 border-red-300',
+  RECOVERY_REQUIRED: 'bg-red-100 text-red-800 border-red-300',
+  DUPLICATE_CLAIM: 'bg-red-50 text-red-700 border-red-200',
+  CLAIM_SPLITTING_SUSPECTED: 'bg-orange-50 text-orange-700 border-orange-200',
+  HIGH_CLAIM_FREQUENCY: 'bg-amber-50 text-amber-700 border-amber-200',
+  ITEMS_DO_NOT_MATCH_TOTAL: 'bg-amber-50 text-amber-700 border-amber-200',
 };
 
 export function FlagBadge({ flag, className }: FlagBadgeProps) {

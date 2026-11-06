@@ -148,6 +148,8 @@ async def test_ingest_unknown_member_404(client: AsyncClient, auth_headers: dict
         headers=auth_headers,
         json={"memberNumber": "CIM-NOPE", "providerCode": "PROV-HRE-00023",
               "claimedAmount": 10, "memberShortfall": 2,
-              "expectedShortfallMin": 1, "expectedShortfallMax": 3, "items": []},
+              "expectedShortfallMin": 1, "expectedShortfallMax": 3,
+              "items": [{"description": "GP Consultation", "quantity": 1,
+                         "unitPrice": 10, "total": 10}]},
     )
     assert resp.status_code == 404

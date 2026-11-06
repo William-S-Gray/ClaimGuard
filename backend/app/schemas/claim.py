@@ -1,10 +1,10 @@
 """Claim schemas — mirror the frontend `Claim` contract (camelCase)."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import TYPE_CHECKING
 
-from pydantic import field_serializer
+from pydantic import Field, field_serializer, field_validator, model_validator
 
 from app.schemas.common import CamelModel, StrId
 from app.schemas.member import MemberOut
@@ -101,31 +101,81 @@ class ClaimOut(ClaimSummary):
 
 
 class ClaimIngestItem(CamelModel):
-    description: str
-    quantity: int = 1
-    unit_price: float
-    total: float
+    description: str = Field(..., min_length=1, max_length=500)
+    quantity: int = Field(1, ge=1, le=10_000)
+    unit_price: float = Field(..., ge=0, le=1_000_000)
+    total: float = Field(..., ge=0, le=10_000_000)
     icd10_code: str | None = None
     nappi_code: str | None = None
 
+    @model_validator(mode="after")
+    def _line_adds_up(self) -> ClaimIngestItem:
+        # A line whose total isn't quantity x price is malformed, not suspicious.
+        if abs(self.quantity * self.unit_price - self.total) > 0.01:
+            raise ValueError(
+                f"line total {self.total} is not quantity x unit price "
+                f"({self.quantity} x {self.unit_price})"
+            )
+        return self
+
+
+_MAX_CLAIM = 1_000_000  # US$; anything larger is a data error, not a claim
+
+
+def _iso_date(value: str | None, name: str) -> str | None:
+    if value is None:
+        return None
+    try:
+        return date.fromisoformat(value).isoformat()
+    except ValueError as exc:
+        raise ValueError(f"{name} must be a YYYY-MM-DD date") from exc
+
 
 class ClaimIngest(CamelModel):
-    """Incoming claim payload (e.g. from the NH263 feed) to be scored on arrival."""
+    """Incoming claim payload (e.g. from the NH263 feed) to be scored on arrival.
 
-    claim_ref: str | None = None  # optional; enables idempotent re-delivery
-    nh263_ref: str | None = None
-    member_number: str
-    provider_code: str
+    Impossible data is rejected here (422) rather than scored: a negative amount
+    or a future service date can't be weighed as "a bit risky". Data that is
+    merely unusual (items that don't add up to the claimed amount) is accepted
+    and flagged by FraudShield instead.
+    """
+
+    claim_ref: str | None = Field(None, max_length=40)  # optional; idempotent re-delivery
+    nh263_ref: str | None = Field(None, max_length=64)
+    member_number: str = Field(..., min_length=1, max_length=64)
+    provider_code: str = Field(..., min_length=1, max_length=64)
     service_date: str | None = None
-    claimed_amount: float
-    member_shortfall: float
-    expected_shortfall_min: float
-    expected_shortfall_max: float
-    items: list[ClaimIngestItem] = []
+    claimed_amount: float = Field(..., gt=0, le=_MAX_CLAIM)
+    member_shortfall: float = Field(..., ge=0, le=_MAX_CLAIM)
+    expected_shortfall_min: float = Field(..., ge=0, le=_MAX_CLAIM)
+    expected_shortfall_max: float = Field(..., ge=0, le=_MAX_CLAIM)
+    items: list[ClaimIngestItem] = Field(..., min_length=1, max_length=200)
     # FraudShield input signals — source-provided; the rest are derived at ingest.
     prescription_date: str | None = None
     has_biometric: bool | None = None
     syndicate_signal: bool | None = None
+
+    @field_validator("service_date")
+    @classmethod
+    def _service_date(cls, v: str | None) -> str | None:
+        v = _iso_date(v, "serviceDate")
+        # One day of slack for time zones; beyond that the service hasn't happened.
+        if v and date.fromisoformat(v) > (datetime.now(UTC) + timedelta(days=1)).date():
+            raise ValueError("serviceDate is in the future")
+        return v
+
+    @field_validator("prescription_date")
+    @classmethod
+    def _prescription_date(cls, v: str | None) -> str | None:
+        return _iso_date(v, "prescriptionDate")
+
+    @model_validator(mode="after")
+    def _amounts_consistent(self) -> ClaimIngest:
+        if self.expected_shortfall_min > self.expected_shortfall_max:
+            raise ValueError("expectedShortfallMin is greater than expectedShortfallMax")
+        if self.member_shortfall > self.claimed_amount:
+            raise ValueError("memberShortfall is greater than claimedAmount")
+        return self
 
 
 def claim_to_summary(claim: Claim) -> dict:

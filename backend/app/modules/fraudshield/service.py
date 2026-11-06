@@ -34,7 +34,7 @@ class FraudShieldService:
 
         final_score = self.decide.fuse_scores(rule_score, ml_prob)
         risk_level = self.decide.risk_level(final_score)
-        decision = self.decide.decision(final_score)
+        decision = self.decide.decision(final_score, {f.code for f in flags})
         priority = self.decide.priority(final_score, ctx.syndicate_signal)
 
         shap = self.explain.build_shap(rule_contrib, ml_weights)

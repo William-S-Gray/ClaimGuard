@@ -4,7 +4,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import Select, func, or_, select
+from sqlalchemy import Select, and_, func, or_, select
 
 from app.models.claim import Claim
 from app.models.investigation import Investigation
@@ -156,6 +156,23 @@ class ClaimRepository(BaseRepository[Claim]):
             .where(Claim.provider_id == provider_id)
             .order_by(Claim.submitted_at.desc())
         )
+        return list((await self.session.execute(stmt)).scalars().unique().all())
+
+    async def member_history(self, claim: Claim, days: int = 7) -> list[Claim]:
+        """The member's other claims that matter for scoring this one.
+
+        Everything on the same service date (any provider), plus anything submitted
+        in the `days` before this claim. Duplicate, splitting and frequency checks
+        all run over this one list.
+        """
+        since = (claim.submitted_at or datetime.now(UTC)) - timedelta(days=days)
+        window = [Claim.submitted_at >= since]
+        if claim.service_date:
+            window.append(Claim.service_date == claim.service_date)
+        related = and_(Claim.member_id == claim.member_id, or_(*window))
+        if claim.nh263_ref:  # the same upstream claim re-sent under a new ref
+            related = or_(related, Claim.nh263_ref == claim.nh263_ref)
+        stmt = self._base_query().where(Claim.id != claim.id, related)
         return list((await self.session.execute(stmt)).scalars().unique().all())
 
     async def similar(self, claim: Claim, limit: int = 5) -> list[Claim]:

@@ -21,6 +21,12 @@ class ScoringContext:
     has_biometric: bool = True
     chronic_drug_no_condition: bool = False
     syndicate_signal: bool = False
+    # Claim-history signals, computed from the member's other claims at scoring
+    # time (rules only: not in the ML feature vector, so models need no retrain).
+    duplicate_of: str | None = None       # ref of an earlier identical claim
+    split_suspected: bool = False         # same-day pieces that together cross a threshold
+    member_claims_7d: int = 0             # member's other claims in the prior 7 days
+    items_total: float | None = None      # sum of line items, None when unknown
 
     @property
     def shortfall_ratio(self) -> float:

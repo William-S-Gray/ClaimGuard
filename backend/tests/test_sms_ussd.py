@@ -9,6 +9,7 @@ from httpx import AsyncClient
 
 from app.core.config import settings
 from app.services.claims import SMS_LIMIT, compose_sms_alert, compose_ussd_menu
+from tests.conftest import ingest_claim
 
 FORM = {"content-type": "application/x-www-form-urlencoded"}
 
@@ -43,8 +44,9 @@ async def test_undelivered_alert_falls_back_to_in_app_follow_up(
     client: AsyncClient, auth_headers: dict
 ):
     # Test settings configure no channel, so nothing can actually be sent.
+    ref = await ingest_claim(client, auth_headers)
     resp = await client.post(
-        "/api/v1/claims/CG-00882/member-alert",
+        f"/api/v1/claims/{ref}/member-alert",
         headers=auth_headers,
         json={"channel": "SMS"},
     )
@@ -83,21 +85,23 @@ async def test_gateway_webhooks_disabled_without_secret(client: AsyncClient):
 
 
 async def test_sms_reply_confirms_claim(client: AsyncClient, auth_headers: dict, gateway):
-    phone = await _alert_phone(client, auth_headers, "CG-00882")
+    ref = await ingest_claim(client, auth_headers)
+    phone = await _alert_phone(client, auth_headers, ref)
     resp = await client.post(
         "/api/v1/webhooks/sms",
         content=urlencode({"from": phone, "text": "yes thanks"}),
         headers=gateway,
     )
     assert resp.status_code == 204
-    claim = (await client.get("/api/v1/claims/CG-00882", headers=auth_headers)).json()
+    claim = (await client.get(f"/api/v1/claims/{ref}", headers=auth_headers)).json()
     assert claim["data"]["memberResponse"] == "CONFIRMED"
 
 
 async def test_ussd_session_shows_menu_then_records_choice(
     client: AsyncClient, auth_headers: dict, gateway
 ):
-    phone = await _alert_phone(client, auth_headers, "CG-00882")
+    ref = await ingest_claim(client, auth_headers)
+    phone = await _alert_phone(client, auth_headers, ref)
 
     def step(text: str) -> dict:
         return {"sessionId": "s1", "phoneNumber": phone, "text": text}
@@ -111,7 +115,7 @@ async def test_ussd_session_shows_menu_then_records_choice(
 
     done = await client.post("/api/v1/webhooks/ussd", content=urlencode(step("2")), headers=gateway)
     assert done.text.startswith("END Thank you")
-    claim = (await client.get("/api/v1/claims/CG-00882", headers=auth_headers)).json()
+    claim = (await client.get(f"/api/v1/claims/{ref}", headers=auth_headers)).json()
     assert claim["data"]["memberResponse"] == "DISPUTED"
 
 
@@ -129,8 +133,9 @@ async def test_ussd_code_comes_from_settings(
     stats = await client.get("/api/v1/dashboard/ussd", headers=auth_headers)
     assert stats.json()["data"]["code"] == "*999*1#"
 
+    ref = await ingest_claim(client, auth_headers)
     alert = await client.post(
-        "/api/v1/claims/CG-00882/member-alert", headers=auth_headers, json={"channel": "USSD"}
+        f"/api/v1/claims/{ref}/member-alert", headers=auth_headers, json={"channel": "USSD"}
     )
     data = alert.json()["data"]
     assert data["alert"]["ussdCode"] == "*999*1#"

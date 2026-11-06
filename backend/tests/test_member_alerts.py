@@ -9,6 +9,7 @@ from httpx import AsyncClient
 import app.services.notifications as notif_mod
 from app.api.v1.webhooks import twilio_signature
 from app.core.config import settings
+from tests.conftest import ingest_claim
 
 URL = "http://test/api/v1/webhooks/twilio/whatsapp"
 
@@ -32,8 +33,9 @@ async def test_alert_falls_back_to_next_channel(
 ):
     monkeypatch.setitem(notif_mod.CHANNELS, "WHATSAPP", _Boom())
     monkeypatch.setitem(notif_mod.CHANNELS, "SMS", _Ok())
+    ref = await ingest_claim(client, auth_headers, "CIM-0291847")
     resp = await client.post(
-        "/api/v1/claims/CG-00291/member-alert",
+        f"/api/v1/claims/{ref}/member-alert",
         headers=auth_headers,
         json={"channel": "WHATSAPP"},
     )
@@ -70,8 +72,9 @@ async def test_webhook_rejected_when_twilio_unconfigured(client: AsyncClient):
 async def test_member_whatsapp_reply_disputes_claim(
     client: AsyncClient, auth_headers: dict, twilio
 ):
+    ref = await ingest_claim(client, auth_headers, "CIM-0291847")
     alert = await client.post(
-        "/api/v1/claims/CG-00291/member-alert",
+        f"/api/v1/claims/{ref}/member-alert",
         headers=auth_headers,
         json={"channel": "WHATSAPP"},
     )
@@ -85,7 +88,7 @@ async def test_member_whatsapp_reply_disputes_claim(
     resp = await _reply(client, phone, "no")
     assert resp.status_code == 200, resp.text
 
-    claim = (await client.get("/api/v1/claims/CG-00291", headers=auth_headers)).json()
+    claim = (await client.get(f"/api/v1/claims/{ref}", headers=auth_headers)).json()
     assert claim["data"]["memberResponse"] == "DISPUTED"
     assert claim["data"]["priority"] == "CRITICAL"
 
@@ -93,6 +96,6 @@ async def test_member_whatsapp_reply_disputes_claim(
         "/api/v1/audit?entity_type=claim&pageSize=200", headers=auth_headers
     )
     actions = {
-        e["action"] for e in audit.json()["data"] if e["entityId"] == "CG-00291"
+        e["action"] for e in audit.json()["data"] if e["entityId"] == ref
     }
     assert {"claim.member_alert", "claim.member_response"} <= actions

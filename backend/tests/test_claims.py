@@ -59,16 +59,6 @@ async def test_approve_claim(client: AsyncClient, auth_headers: dict):
     assert resp.json()["data"]["decision"] == "APPROVE"
 
 
-async def test_reject_claim(client: AsyncClient, auth_headers: dict):
-    resp = await client.post(
-        "/api/v1/claims/CG-00112/reject",
-        headers=auth_headers,
-        json={"reason": "REJECT_FRAUD"},
-    )
-    assert resp.status_code == 200
-    assert resp.json()["data"]["decision"] == "REJECT_FRAUD"
-
-
 async def test_rescore_preserves_persisted_signals(client: AsyncClient, auth_headers: dict):
     # CG-00112 was seeded with a syndicate flag → syndicate_signal is persisted on
     # the claim. Rescoring must reproduce that input (re-fire the syndicate rule),
@@ -82,6 +72,16 @@ async def test_rescore_preserves_persisted_signals(client: AsyncClient, auth_hea
     assert "POTENTIAL_FRAUD_SYNDICATE_DETECTED" in detail["flags"]
     assert detail["priority"] == "CRITICAL"  # syndicate signal drives critical priority
     assert detail["riskLevel"] in {"HIGH", "CRITICAL"}
+
+
+async def test_reject_claim(client: AsyncClient, auth_headers: dict):
+    resp = await client.post(
+        "/api/v1/claims/CG-00112/reject",
+        headers=auth_headers,
+        json={"reason": "REJECT_FRAUD"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["data"]["decision"] == "REJECT_FRAUD"
 
 
 # ─── MemberGuard: alerts & confirmation ─────────────────────────────────────────

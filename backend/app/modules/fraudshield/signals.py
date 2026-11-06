@@ -89,14 +89,12 @@ def derive_input_signals(inp: SignalInputs) -> dict[str, bool]:
     # assume it was verified (only an explicit "false" is a signal).
     has_biometric = True if inp.has_biometric is None else bool(inp.has_biometric)
 
-    # syndicate: explicit upstream flag wins; otherwise derive from provider risk.
-    if inp.syndicate_signal is not None:
-        syndicate_signal = bool(inp.syndicate_signal)
-    else:
-        syndicate_signal = (
-            inp.provider_flags_90d >= SYNDICATE_FLAG_THRESHOLD
-            and inp.provider_trust_score < SYNDICATE_TRUST_THRESHOLD
-        )
+    # syndicate: the upstream flag can raise the signal but never clear it. The
+    # submitter of a claim must not be able to switch off our own risk check.
+    syndicate_signal = bool(inp.syndicate_signal) or (
+        inp.provider_flags_90d >= SYNDICATE_FLAG_THRESHOLD
+        and inp.provider_trust_score < SYNDICATE_TRUST_THRESHOLD
+    )
 
     return {
         "chronic_drug_no_condition": _chronic_drug_no_condition(

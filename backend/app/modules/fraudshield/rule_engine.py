@@ -10,6 +10,15 @@ from dataclasses import dataclass
 
 from app.modules.fraudshield.context import Flag, ScoringContext
 
+# A claim at or above this amount needs biometric verification. Also the line
+# claim-splitting tries to stay under, so both rules share it.
+HIGH_VALUE_THRESHOLD = 75
+FREQUENT_CLAIMS_7D = 5  # a member's other claims in a week before it looks unusual
+
+
+def _unitemised(c: ScoringContext) -> bool:
+    return c.items_total is not None and abs(c.claimed_amount - c.items_total) > 0.01
+
 
 @dataclass(slots=True)
 class Rule:
@@ -33,7 +42,38 @@ RULES: list[Rule] = [
         weight=18,
         severity="HIGH",
         description="High-value claim without biometric verification",
-        predicate=lambda c: c.claimed_amount >= 75 and not c.has_biometric,
+        predicate=lambda c: c.claimed_amount >= HIGH_VALUE_THRESHOLD and not c.has_biometric,
+    ),
+    Rule(
+        code="DUPLICATE_CLAIM",
+        weight=35,
+        severity="CRITICAL",
+        description="Same member, provider, service date and amount as an earlier claim",
+        predicate=lambda c: c.duplicate_of is not None,
+    ),
+    Rule(
+        code="CLAIM_SPLITTING_SUSPECTED",
+        weight=24,
+        severity="HIGH",
+        description=(
+            "Same-day claims at one provider, each under the high-value line, "
+            "that together cross it"
+        ),
+        predicate=lambda c: c.split_suspected,
+    ),
+    Rule(
+        code="HIGH_CLAIM_FREQUENCY",
+        weight=12,
+        severity="MEDIUM",
+        description="Member has an unusual number of claims this week",
+        predicate=lambda c: c.member_claims_7d >= FREQUENT_CLAIMS_7D,
+    ),
+    Rule(
+        code="ITEMS_DO_NOT_MATCH_TOTAL",
+        weight=10,
+        severity="MEDIUM",
+        description="Claimed amount differs from the sum of its line items",
+        predicate=_unitemised,
     ),
     Rule(
         code="CHRONIC_DRUG_NO_CONDITION_REGISTERED",
