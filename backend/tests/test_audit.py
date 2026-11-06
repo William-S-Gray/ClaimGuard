@@ -7,7 +7,7 @@ from httpx import AsyncClient
 async def test_viewing_a_claim_is_audited(client: AsyncClient, auth_headers: dict):
     await client.get("/api/v1/claims/CG-00291", headers=auth_headers)
     resp = await client.get(
-        "/api/v1/audit?entity_type=claim&pageSize=200", headers=auth_headers
+        "/api/v1/audit?entity_type=claim&page_size=200", headers=auth_headers
     )
     entries = resp.json()["data"]
     views = [
@@ -24,7 +24,7 @@ async def test_viewing_a_member_is_audited(client: AsyncClient, auth_headers: di
     await client.get(f"/api/v1/members/{member_id}", headers=auth_headers)
 
     resp = await client.get(
-        "/api/v1/audit?entity_type=member&pageSize=200", headers=auth_headers
+        "/api/v1/audit?entity_type=member&page_size=200", headers=auth_headers
     )
     entries = resp.json()["data"]
     assert any(
@@ -51,7 +51,7 @@ async def test_audit_accessible_to_auditor(client: AsyncClient, auditor_headers:
 
 async def test_audit_lists_actor_name(client: AsyncClient, auth_headers: dict):
     resp = await client.get(
-        "/api/v1/audit?action=claim.approve&pageSize=100", headers=auth_headers
+        "/api/v1/audit?action=claim.approve&page_size=100", headers=auth_headers
     )
     assert resp.status_code == 200
     rows = resp.json()["data"]
@@ -96,7 +96,7 @@ async def test_audit_filters_endpoint(client: AsyncClient, auth_headers: dict):
 
 async def test_audit_entry_includes_actor_roles(client: AsyncClient, auth_headers: dict):
     resp = await client.get(
-        "/api/v1/audit?action=claim.approve&pageSize=100", headers=auth_headers
+        "/api/v1/audit?action=claim.approve&page_size=100", headers=auth_headers
     )
     row = next(r for r in resp.json()["data"] if r.get("actorName") == "Rudo Chidziva")
     assert "analyst" in row["actorRoles"]
@@ -105,7 +105,7 @@ async def test_audit_entry_includes_actor_roles(client: AsyncClient, auth_header
 async def test_audit_detail_shows_entity_history(client: AsyncClient, auth_headers: dict):
     # The seeded reject of CG-00291; its detail should surface the record's history.
     listed = await client.get(
-        "/api/v1/audit?action=claim.reject&entity_type=claim&pageSize=100",
+        "/api/v1/audit?action=claim.reject&entity_type=claim&page_size=100",
         headers=auth_headers,
     )
     entry = next(r for r in listed.json()["data"] if r["entityId"] == "CG-00291")
