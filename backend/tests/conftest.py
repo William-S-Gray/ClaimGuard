@@ -10,6 +10,7 @@ os.environ.setdefault("REDIS_URL", "redis://localhost:6399/0")  # forces fallbac
 os.environ.setdefault("RATE_LIMIT_PER_MINUTE", "100000")
 
 import contextlib  # noqa: E402
+import itertools  # noqa: E402
 
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
@@ -79,19 +80,22 @@ async def auditor_headers(client: AsyncClient) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+_claim_counter = itertools.count()
+
+
 async def ingest_claim(
     client: AsyncClient, headers: dict, member: str = "CIM-0882341", *, risky: bool = False
 ) -> str:
     """A brand-new claim for `member`, so a test never inherits another test's state."""
-    import random
     import uuid
     from datetime import date, timedelta
 
-    # A distinct date and amount each time, so test claims never look like
+    # A service date no other test claim has, so test claims never look like
     # duplicates or split pieces of one another (FraudShield checks for both).
-    rng = random.Random(uuid.uuid4().int)
-    amount = (400 if risky else 30) + rng.randint(1, 99) / 100
-    service_date = (date.today() - timedelta(days=rng.randint(30, 3000))).isoformat()
+    # A counter, not randomness: random dates collide now and then.
+    n = next(_claim_counter)
+    amount = (400 if risky else 30) + (n % 99 + 1) / 100
+    service_date = (date.today() - timedelta(days=30 + n)).isoformat()
     payload = {
         "claimRef": f"CG-T{uuid.uuid4().hex[:8].upper()}",
         "memberNumber": member,
