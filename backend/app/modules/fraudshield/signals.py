@@ -85,9 +85,11 @@ def derive_input_signals(inp: SignalInputs) -> dict[str, bool]:
     else:
         prescription_after_service = False
 
-    # biometric verification: trust the source; absence of the field means we
-    # assume it was verified (only an explicit "false" is a signal).
+    # biometric verification: an explicit "false" is the strong signal. A missing
+    # field is *unknown*: the model still sees it as verified (as it was trained),
+    # and `biometric_reported` lets a lighter rule flag the gap on large claims.
     has_biometric = True if inp.has_biometric is None else bool(inp.has_biometric)
+    biometric_reported = inp.has_biometric is not None
 
     # syndicate: the upstream flag can raise the signal but never clear it. The
     # submitter of a claim must not be able to switch off our own risk check.
@@ -102,5 +104,6 @@ def derive_input_signals(inp: SignalInputs) -> dict[str, bool]:
         ),
         "prescription_after_service": prescription_after_service,
         "has_biometric": has_biometric,
+        "biometric_reported": biometric_reported,
         "syndicate_signal": syndicate_signal,
     }

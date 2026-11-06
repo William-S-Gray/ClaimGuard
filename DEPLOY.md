@@ -169,6 +169,11 @@ WebSocket calls.
   member reply after `MEMBER_ALERT_TTL_DAYS` (default 7; `MEMBER_NO_REPLY`), with one
   summary notification per sweep. A Free instance sleeps when idle, so the sweep runs
   when it wakes, not on a strict clock.
+- **Payment hold:** a claim FraudShield approves is paid `PAYMENT_HOLD_HOURS` later
+  (default 72; `0` pays at once). Until then a member dispute, an opened investigation or
+  an info request withdraws the approval, and a reviewer can reject it or release it
+  early. The sweep releases holds that run out, after which the approval is final. A
+  claim a person approves is paid at once.
 - **Web concurrency**: the API runs under gunicorn with `WEB_CONCURRENCY` uvicorn workers
   (default 2). Realtime events fan out across workers via a Redis pub/sub backplane, so
   scaling workers/instances is safe. Raise `WEB_CONCURRENCY` for a bigger plan.

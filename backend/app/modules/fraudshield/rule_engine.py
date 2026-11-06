@@ -16,6 +16,20 @@ HIGH_VALUE_THRESHOLD = 75
 FREQUENT_CLAIMS_7D = 5  # a member's other claims in a week before it looks unusual
 
 
+PEER_SHORTFALL_FACTOR = 1.4   # this much above the peer norm...
+PEER_SHORTFALL_MIN_USD = 5.0  # ...and at least this many dollars over it
+
+
+def _above_peers(c: ScoringContext) -> bool:
+    if c.peer_shortfall_ratio is None or c.claimed_amount <= 0:
+        return False
+    expected = c.peer_shortfall_ratio * c.claimed_amount
+    return (
+        c.member_shortfall >= PEER_SHORTFALL_FACTOR * expected
+        and c.member_shortfall - expected >= PEER_SHORTFALL_MIN_USD
+    )
+
+
 def _unitemised(c: ScoringContext) -> bool:
     return c.items_total is not None and abs(c.claimed_amount - c.items_total) > 0.01
 
@@ -43,6 +57,14 @@ RULES: list[Rule] = [
         severity="HIGH",
         description="High-value claim without biometric verification",
         predicate=lambda c: c.claimed_amount >= HIGH_VALUE_THRESHOLD and not c.has_biometric,
+    ),
+    Rule(
+        code="BIOMETRIC_NOT_REPORTED",
+        weight=8,
+        severity="MEDIUM",
+        description="High-value claim and the source didn't say whether biometrics were checked",
+        predicate=lambda c: c.claimed_amount >= HIGH_VALUE_THRESHOLD
+        and not c.biometric_reported,
     ),
     Rule(
         code="DUPLICATE_CLAIM",
@@ -88,6 +110,13 @@ RULES: list[Rule] = [
         severity="MEDIUM",
         description="Member shortfall materially above expected range",
         predicate=lambda c: c.shortfall_ratio >= 1.4,
+    ),
+    Rule(
+        code="SHORTFALL_ABOVE_PEERS",
+        weight=16,
+        severity="MEDIUM",
+        description="Member shortfall well above what other providers charge for this item",
+        predicate=_above_peers,
     ),
     Rule(
         code="STATISTICAL_ANOMALY_DETECTED",

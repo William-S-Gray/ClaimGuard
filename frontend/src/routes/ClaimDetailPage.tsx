@@ -95,7 +95,9 @@ export function ClaimDetailPage() {
   }
 
   // Mirrors the API: decided claims are final; approving over a dispute needs a reason.
-  const isDecided = FINAL_DECISIONS.includes(claim.decision);
+  // A model approval waits `autoApproveAt` before payment and can still be stopped.
+  const onHold = claim.decision === 'APPROVE' && !!claim.autoApproveAt;
+  const isDecided = FINAL_DECISIONS.includes(claim.decision) && !onHold;
   const isDisputed = claim.memberResponse === 'DISPUTED';
   const needsReason = isDisputed && overrideReason.trim().length < OVERRIDE_REASON_MIN;
 
@@ -278,6 +280,13 @@ export function ClaimDetailPage() {
                 </p>
               ) : (
                 <div className="space-y-2">
+                  {onHold && (
+                    <p className="text-xs text-amber-800 bg-amber-50 border border-amber-100 rounded-lg p-3">
+                      FraudShield approved this claim. Payment is held until{' '}
+                      <span className="font-medium">{formatDateTime(claim.autoApproveAt!)}</span>: a member
+                      dispute, an investigation or a rejection before then stops it.
+                    </p>
+                  )}
                   {isDisputed && canApprove && (
                     <div>
                       <label htmlFor="override-reason" className="block text-xs font-medium text-red-700 mb-1">
@@ -304,7 +313,7 @@ export function ClaimDetailPage() {
                     ) : (
                       <CheckCircle size={15} />
                     )}
-                    Approve Claim
+                    {onHold ? 'Release Payment Now' : 'Approve Claim'}
                   </button>
                   <button
                     className="btn-danger w-full justify-center"

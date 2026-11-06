@@ -19,6 +19,7 @@ class ScoringContext:
     item_descriptions: list[str] = field(default_factory=list)
     prescription_after_service: bool = False
     has_biometric: bool = True
+    biometric_reported: bool = True
     chronic_drug_no_condition: bool = False
     syndicate_signal: bool = False
     # Claim-history signals, computed from the member's other claims at scoring
@@ -27,6 +28,9 @@ class ScoringContext:
     split_suspected: bool = False         # same-day pieces that together cross a threshold
     member_claims_7d: int = 0             # member's other claims in the prior 7 days
     items_total: float | None = None      # sum of line items, None when unknown
+    # Typical shortfall / claimed for this item at other providers (None when
+    # there isn't enough history). Independent of the range the claim sends.
+    peer_shortfall_ratio: float | None = None
 
     @property
     def shortfall_ratio(self) -> float:

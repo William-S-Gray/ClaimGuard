@@ -130,6 +130,9 @@ class Settings(BaseSettings):
     claim_sweep_minutes: int = Field(15, ge=0, le=1440)
     # Days a member has to answer a verification alert before it lapses.
     member_alert_ttl_days: int = Field(7, ge=1, le=90)
+    # Hours a model-approved claim waits before it is paid. Until then a member's
+    # dispute, an investigation or a reviewer can still stop it. 0 = pay at once.
+    payment_hold_hours: int = Field(72, ge=0, le=720)
 
     @property
     def email_configured(self) -> bool:
