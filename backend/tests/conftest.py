@@ -8,6 +8,7 @@ os.environ.setdefault("DATABASE_URL", "sqlite+aiosqlite:///./test_claimguard.db"
 os.environ.setdefault("ENVIRONMENT", "test")
 os.environ.setdefault("REDIS_URL", "redis://localhost:6399/0")  # forces fallback
 os.environ.setdefault("RATE_LIMIT_PER_MINUTE", "100000")
+os.environ.setdefault("DEMO_MODE", "true")  # the suite exercises the demo seed + router
 
 import contextlib  # noqa: E402
 import itertools  # noqa: E402
