@@ -88,9 +88,18 @@ it arrives, via `app/modules/fraudshield/signals.py`:
 | Signal | How ingestion sets it |
 |--------|-----------------------|
 | `has_biometric` | from the payload (`hasBiometric`); defaults to `true` if the source omits it |
+| `biometric_reported` | `false` when the source omits `hasBiometric`. The model still sees `has_biometric=true` (as trained); the `BIOMETRIC_NOT_REPORTED` rule flags the gap on claims ≥ US$75 |
 | `prescription_after_service` | derived from `prescriptionDate` vs `serviceDate` |
 | `chronic_drug_no_condition` | derived: a claim item is a chronic medication (`CHRONIC_MEDICATIONS`) the member has no matching registered condition for |
-| `syndicate_signal` | explicit upstream flag, else derived from provider risk (`flags_90d ≥ 20` and `trust < 50`) |
+| `syndicate_signal` | the upstream flag **or** provider risk (`flags_90d ≥ 20` and `trust < 50`); the source can raise it, never clear it |
+
+Rules that read claim history rather than the payload (computed at every score,
+not features of the trained model):
+
+| Rule | Looks at |
+|------|----------|
+| `DUPLICATE_CLAIM`, `CLAIM_SPLITTING_SUSPECTED`, `HIGH_CLAIM_FREQUENCY` | the member's other claims (same day / past 7 days) |
+| `SHORTFALL_ABOVE_PEERS` | median shortfall ÷ claimed for the claim's main item (NAPPI code, else description) at **other** providers, once there are ≥ 5 of them. Independent of `expectedShortfallMin/Max`, which the submitter sends. Replace with a tariff table when Cimas/NH263 rates are available |
 
 To adapt for your real feed: point your NH263/claims webhook at `ingest()` (or
 map your payload to the `ClaimIngest` schema), and refine the derivation rules in

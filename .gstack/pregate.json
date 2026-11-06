@@ -25,6 +25,7 @@
       "backend/tests/test_provider_portal.py",
       "backend/tests/test_rbac.py",
       "backend/tests/test_reads.py",
+      "backend/tests/test_scoring_inputs.py",
       "backend/tests/test_security.py",
       "backend/tests/test_sms_ussd.py",
       "backend/tests/test_trustscore.py",

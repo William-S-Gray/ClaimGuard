@@ -8,7 +8,7 @@ from sqlalchemy import Select, and_, func, or_, select
 
 from app.core.config import settings
 from app.core.phone import national_tail, normalize_phone
-from app.models.claim import Claim
+from app.models.claim import Claim, ClaimItem
 from app.models.investigation import Investigation
 from app.models.member import Member
 from app.models.provider import Provider
@@ -188,6 +188,37 @@ class ClaimRepository(BaseRepository[Claim]):
             related = or_(related, Claim.nh263_ref == claim.nh263_ref)
         stmt = self._base_query().where(Claim.id != claim.id, related)
         return list((await self.session.execute(stmt)).scalars().unique().all())
+
+    async def peer_shortfall_ratios(
+        self, claim: Claim, item_key: str, by_nappi: bool, limit: int = 500
+    ) -> list[float]:
+        """Shortfall / claimed for recent claims of the same item at *other* providers.
+
+        Other providers only: a provider that inflates every shortfall would
+        otherwise set its own baseline. Data-error rejections don't count.
+        """
+        match = (
+            ClaimItem.nappi_code == item_key
+            if by_nappi
+            else func.lower(func.trim(ClaimItem.description)) == item_key
+        )
+        stmt = (
+            select(Claim.id, Claim.member_shortfall, Claim.claimed_amount)
+            .join(ClaimItem, ClaimItem.claim_id == Claim.id)
+            .where(
+                match,
+                Claim.deleted_at.is_(None),
+                Claim.id != claim.id,
+                Claim.provider_id != claim.provider_id,
+                Claim.decision != "REJECT_ERROR",
+                Claim.claimed_amount > 0,
+            )
+            .distinct()
+            .order_by(Claim.id)
+            .limit(limit)
+        )
+        rows = (await self.session.execute(stmt)).all()
+        return [float(s) / float(a) for _, s, a in rows]
 
     async def similar(self, claim: Claim, limit: int = 5) -> list[Claim]:
         """The same member's other claims at the same provider, newest first."""

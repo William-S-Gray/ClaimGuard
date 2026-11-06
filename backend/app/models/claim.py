@@ -8,10 +8,12 @@ from sqlalchemy import (
     JSON,
     DateTime,
     ForeignKey,
+    Index,
     Integer,
     Numeric,
     String,
     Text,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -42,6 +44,10 @@ class Claim(BaseEntity):
     # inputs the scorer saw (these aren't derivable from the other columns).
     prescription_after_service: Mapped[bool] = mapped_column(default=False)
     has_biometric: Mapped[bool] = mapped_column(default=True)
+    # False when the source never said: `has_biometric` then holds the old
+    # assumed-verified default (what the model was trained on), and the
+    # BIOMETRIC_NOT_REPORTED rule makes the gap visible instead.
+    biometric_reported: Mapped[bool] = mapped_column(default=True)
     chronic_drug_no_condition: Mapped[bool] = mapped_column(default=False)
     syndicate_signal: Mapped[bool] = mapped_column(default=False)
 
@@ -90,6 +96,13 @@ class Claim(BaseEntity):
 
 
 class ClaimItem(BaseEntity):
+    # FraudShield's peer-shortfall lookup matches items by NAPPI code or by
+    # normalised description on every score: index both.
+    __table_args__ = (
+        Index("ix_claim_items_nappi_code", "nappi_code"),
+        Index("ix_claim_items_description_norm", text("lower(trim(description))")),
+    )
+
     claim_id: Mapped[uuid.UUID] = mapped_column(
         GUID, ForeignKey("claims.id", ondelete="CASCADE"), index=True
     )

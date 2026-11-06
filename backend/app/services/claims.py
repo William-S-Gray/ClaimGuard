@@ -1,6 +1,7 @@
 """Claims application service — queue, detail, lifecycle actions, scoring."""
 from __future__ import annotations
 
+import statistics
 import uuid
 from datetime import UTC, datetime, timedelta
 
@@ -26,6 +27,7 @@ from app.services.providers import ProviderService
 # Hours until an un-actioned claim breaches SLA.
 _SLA_HOURS = 48
 _HISTORY_DAYS = 7  # how far back duplicate/splitting/frequency checks look
+_MIN_PEERS = 5  # other-provider claims needed before a peer shortfall norm counts
 
 _REJECT_REASONS = {"REJECT_FRAUD", "REJECT_ERROR"}
 
@@ -627,6 +629,7 @@ class ClaimService:
             item_descriptions=[i.description for i in claim.items],
             prescription_after_service=claim.prescription_after_service,
             has_biometric=claim.has_biometric,
+            biometric_reported=claim.biometric_reported,
             chronic_drug_no_condition=claim.chronic_drug_no_condition,
             syndicate_signal=claim.syndicate_signal,
             items_total=sum(float(i.total) for i in claim.items) if claim.items else None,
@@ -681,11 +684,30 @@ class ClaimService:
         )
 
         week = timedelta(days=_HISTORY_DAYS)
+        ctx.peer_shortfall_ratio = await self._peer_shortfall_ratio(claim)
         ctx.member_claims_7d = sum(
             1 for c in history
             if c.member_id == claim.member_id and me - week <= _at(c) <= me
         )
         return ctx
+
+    async def _peer_shortfall_ratio(self, claim: Claim) -> float | None:
+        """Median shortfall / claimed for the claim's main item at other providers.
+
+        The main item is the largest line, keyed by NAPPI code when there is one
+        (a drug's code is exact; descriptions vary), else by description.
+        """
+        if not claim.items:
+            return None
+        main = max(claim.items, key=lambda i: float(i.total or 0))
+        by_nappi = bool(main.nappi_code)
+        key = main.nappi_code if by_nappi else (main.description or "").strip().lower()
+        if not key:
+            return None
+        ratios = await self.repo.peer_shortfall_ratios(claim, key, by_nappi)
+        if len(ratios) < _MIN_PEERS:
+            return None  # too little history to say what's normal
+        return statistics.median(ratios)
 
     def _apply_result(self, claim: Claim, result: ScoringResult) -> None:
         # Flags raised by people or by the lifecycle (a member's dispute, a breached
