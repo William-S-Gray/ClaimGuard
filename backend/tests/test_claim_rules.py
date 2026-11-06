@@ -131,7 +131,8 @@ async def test_approving_over_a_dispute_needs_a_reason(client: AsyncClient, auth
     approved = [t for t in resp.json()["data"]["timeline"] if t["event"] == "Claim approved"]
     assert reason in approved[-1]["description"]
 
-    audit = await client.get("/api/v1/audit?entity_type=claim&pageSize=200", headers=auth_headers)
+    audit = await client.get("/api/v1/audit?action=claim.approve&page_size=200",
+                             headers=auth_headers)
     entry = next(e for e in audit.json()["data"]
                  if e["entityId"] == ref and e["action"] == "claim.approve")
     assert entry["changes"]["reason"] == reason

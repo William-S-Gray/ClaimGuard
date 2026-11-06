@@ -43,7 +43,7 @@ async def test_lockout_holds_across_ip_addresses(client: AsyncClient, monkeypatc
 async def test_failed_login_is_audited(client: AsyncClient, auth_headers: dict):
     email = f"nobody-{uuid.uuid4().hex[:6]}@claimguard.co.zw"
     await client.post(f"{AUTH}/login", json={"email": email, "password": "wrong-password"})
-    audit = await client.get("/api/v1/audit?pageSize=200", headers=auth_headers)
+    audit = await client.get("/api/v1/audit?page_size=200", headers=auth_headers)
     assert any(
         e["action"] == "auth.login_failed" and e.get("actorEmail") == email
         for e in audit.json()["data"]
